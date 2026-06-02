@@ -6,6 +6,7 @@ import json
 from agent.adapters.lark_doc import LarkDocAdapter
 from agent.adapters.local_files import LocalFileAdapter
 from agent.adapters.meegle import MeegleAdapter
+from agent.artifact_resolver import ArtifactResolver
 from agent.core.creative_pack import CreativePackBuilder
 from agent.core.automation_planner import AutomationPlanner
 from agent.core.candidate_comparison import CandidateComparisonMatrixBuilder
@@ -104,6 +105,7 @@ class DesignCopilotApp:
         self.delivery_readiness = DeliveryReadinessAuditor()
         self.review_packet_builder = DesignerReviewPacketBuilder()
         self.workflow_planner = DesignWorkflowPlanner()
+        self.artifact_resolver = ArtifactResolver(self.paths)
         self.workitem_intake = WorkItemIntakeDiagnostician()
         self.designer_cockpit_builder = DesignerCockpitBuilder()
         self.designer_dashboard_builder = DesignerDashboardBuilder()
@@ -1399,7 +1401,7 @@ class DesignCopilotApp:
         candidate_review_path = self._candidate_review_path(project_key, effective_work_item_id)
         if candidate_review_path:
             extra_artifacts.append(str(candidate_review_path))
-        artifact_index = self.workflow_planner.collect_artifacts(output_dir, extra_artifacts)
+        artifact_index = self.artifact_resolver.collect_artifacts(output_dir, extra_artifacts)
         payloads = {
             key: load_json(Path(value), None) if value else None
             for key, value in artifact_index.items()
@@ -1451,7 +1453,7 @@ class DesignCopilotApp:
             candidate_review_path = self._candidate_review_path(project_key, effective_work_item_id)
             if candidate_review_path:
                 extra_artifacts.append(str(candidate_review_path))
-        artifact_index = self.workflow_planner.collect_artifacts(target_dir if target_dir.exists() else None, extra_artifacts)
+        artifact_index = self.artifact_resolver.collect_artifacts(target_dir if target_dir.exists() else None, extra_artifacts)
         payloads = {
             key: load_json(Path(value), None) if value else None
             for key, value in artifact_index.items()

@@ -28,6 +28,12 @@ def build_parser() -> argparse.ArgumentParser:
     dashboard.add_argument("--work-item-id")
     dashboard.add_argument("--output-dir")
 
+    serve = subparsers.add_parser("serve", help="Run the local CrealityOS visual console.")
+    serve.add_argument("--project-key")
+    serve.add_argument("--work-item-id")
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=8787)
+
     fetch_todos = subparsers.add_parser("fetch-todos", help="Fetch Meegle todos.")
     fetch_todos.add_argument("--action", default="todo")
     fetch_todos.add_argument("--asset-key")
@@ -392,6 +398,17 @@ def main() -> None:
             work_item_id=args.work_item_id,
             output_dir=args.output_dir,
         )
+    elif args.command == "serve":
+        from agent.console_server import run_console_server
+
+        run_console_server(
+            root=Path(args.root).resolve(),
+            host=args.host,
+            port=args.port,
+            project_key=args.project_key,
+            work_item_id=args.work_item_id,
+        )
+        return
     elif args.command == "fetch-todos":
         output = app.fetch_todos(action=args.action, asset_key=args.asset_key, max_pages=args.max_pages)
     elif args.command == "screen-todos":

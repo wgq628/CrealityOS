@@ -8,6 +8,8 @@ import uuid
 from pathlib import Path
 
 from agent.app import DesignCopilotApp
+from agent.console_server import _state_from_request, render_console_html
+from agent.settings import AppPaths
 
 
 class CliEntrypointTests(unittest.TestCase):
@@ -100,6 +102,72 @@ class CliEntrypointTests(unittest.TestCase):
         self.assertEqual(payload["cockpit"]["work_item_id"], "7001")
         self.assertTrue(payload["design_brief"])
         self.assertTrue(payload["requirement_memory"])
+
+    def test_console_state_and_html_render_from_local_artifacts(self) -> None:
+        requirement_file = self.root / "requirement.md"
+        requirement_file.write_text(
+            "Need a 9:16 launch ad, strong gameplay read, output PSD and PNG.",
+            encoding="utf-8",
+        )
+        self.app.build_local_creative_pack(
+            project_key="CONSOLE",
+            work_item_id="8101",
+            title="Console Launch Ad",
+            requirement_file=str(requirement_file),
+            same_category="casual-card",
+        )
+        self.app.create_design_workflow_plan(project_key="CONSOLE", work_item_id="8101")
+
+        payload = _state_from_request(
+            "project=CONSOLE&work_item=8101",
+            self.app,
+            AppPaths.from_root(self.root),
+            None,
+            None,
+        )
+        html = render_console_html(payload)
+
+        self.assertEqual(payload["console"]["project_key"], "CONSOLE")
+        self.assertEqual(payload["console"]["work_item_id"], "8101")
+        self.assertTrue(payload["artifact_index"]["creative_pack"])
+        self.assertIn("CrealityOS Console", html)
+        self.assertIn("console-data", html)
+        self.assertIn("/api/state", html)
+
+    def test_console_corrects_project_work_item_mismatch(self) -> None:
+        real_requirement = self.root / "real.md"
+        real_requirement.write_text("Real project task, output PNG.", encoding="utf-8")
+        local_requirement = self.root / "local.md"
+        local_requirement.write_text("Local project task, output PNG.", encoding="utf-8")
+        self.app.build_local_creative_pack(
+            project_key="REAL",
+            work_item_id="9001",
+            title="Real Task",
+            requirement_file=str(real_requirement),
+            same_category="casual-card",
+        )
+        self.app.build_local_creative_pack(
+            project_key="LOCAL",
+            work_item_id="5001",
+            title="Local Task",
+            requirement_file=str(local_requirement),
+            same_category="casual-card",
+        )
+
+        payload = _state_from_request(
+            "project=LOCAL&work_item=9001",
+            self.app,
+            AppPaths.from_root(self.root),
+            None,
+            None,
+        )
+
+        self.assertEqual(payload["console"]["requested_project_key"], "LOCAL")
+        self.assertEqual(payload["console"]["project_key"], "REAL")
+        self.assertEqual(payload["console"]["work_item_id"], "9001")
+        self.assertTrue(payload["console"]["corrected"])
+        self.assertTrue(payload["console"]["notices"])
+        self.assertIn("REAL", payload["console"]["output_dir"])
 
     def test_generate_project_skill_from_learned_memory(self) -> None:
         requirement_file = self.root / "requirement.md"

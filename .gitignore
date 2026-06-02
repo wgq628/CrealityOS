@@ -12,6 +12,7 @@ workspace/runs/*
 workspace/deliveries/*
 !workspace/deliveries/.gitkeep
 workspace/test-sandboxes/*
+workspace/*.log
 memory/projects/*
 !memory/projects/.gitkeep
 memory/reviews/*

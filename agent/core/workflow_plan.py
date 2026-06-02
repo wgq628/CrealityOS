@@ -4,34 +4,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from agent.artifact_resolver import IMPORTANT_ARTIFACT_FILES, collect_artifacts
 from agent.models import DesignWorkflowPlan, DesignWorkflowStep
 
 
 class DesignWorkflowPlanner:
-    IMPORTANT_FILES = (
-        "design_brief.json",
-        "requirement_clarification_report.json",
-        "requirement_change_report.json",
-        "creative_pack.json",
-        "style_transfer_report.json",
-        "style_alignment_report.json",
-        "design_decision_record.json",
-        "image_generation_batch.json",
-        "image_generation_jobs.json",
-        "image_execution_package.json",
-        "image_generation_results.json",
-        "candidate_style_drift_report.json",
-        "candidate_comparison_matrix.json",
-        "candidate_review.json",
-        "psd_handoff_plan.json",
-        "psd_handoff_package.json",
-        "psd_slice_spec_report.json",
-        "delivery_readiness_report.json",
-        "design_workflow_plan.json",
-        "designer_review_packet.json",
-        "designer_cockpit.json",
-        "meegle_writeback_draft.json",
-    )
+    IMPORTANT_FILES = IMPORTANT_ARTIFACT_FILES
 
     def build(
         self,
@@ -119,17 +97,7 @@ class DesignWorkflowPlanner:
 
     @classmethod
     def collect_artifacts(cls, output_dir: Path | None, extra_artifacts: list[str] | None = None) -> dict[str, str | None]:
-        artifact_index: dict[str, str | None] = {Path(name).stem: None for name in cls.IMPORTANT_FILES}
-        candidates: list[Path] = []
-        if output_dir and output_dir.exists():
-            candidates.extend(path for path in output_dir.rglob("*") if path.name in cls.IMPORTANT_FILES)
-        for raw in extra_artifacts or []:
-            path = Path(raw)
-            if path.exists() and path.name in cls.IMPORTANT_FILES:
-                candidates.append(path)
-        for path in candidates:
-            artifact_index[path.stem] = str(path)
-        return artifact_index
+        return collect_artifacts(output_dir, extra_artifacts)
 
     def _step(
         self,
