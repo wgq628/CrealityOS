@@ -219,7 +219,7 @@ def run_console_server(
     paths = AppPaths.from_root(root)
 
     class ConsoleHandler(BaseHTTPRequestHandler):
-        server_version = "CrealityOSWorkbench/0.2"
+        server_version = "CrealityOSWorkbench/0.3"
 
         def do_GET(self) -> None:  # noqa: N802 - stdlib handler API
             parsed = urlparse(self.path)
@@ -366,7 +366,7 @@ def _state_from_request(
     }
     payload["asset_previews"] = _asset_previews(payload, paths.root)
     payload["workbench"] = {
-        "version": "0.2",
+        "version": "0.3",
         "actions": _available_actions(),
         "planar_analysis": _planar_analysis(payload),
         "output_matrix": _output_matrix(payload),
@@ -1211,7 +1211,7 @@ def render_product_workbench_html(payload: dict) -> str:
     document.getElementById('heroChips').innerHTML = [
       `<span class="chip ${esc(status)}">${esc(status)}</span>`,
       `<span class="chip">${esc(brief.same_category || '品类待确认')}</span>`,
-      `<span class="chip">Workbench v${esc(workbench.version || '0.2')}</span>`,
+      `<span class="chip">Workbench v${esc(workbench.version || '0.3')}</span>`,
       `<span class="chip">API ${esc(c.routes?.state || '/api/state')} / ${esc(c.routes?.run_action || '/api/action/run')}</span>`
     ].join('');
     document.getElementById('metrics').innerHTML = [

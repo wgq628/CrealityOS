@@ -1,0 +1,175 @@
+{
+  "project_key": "example-game",
+  "work_item_id": "example-work-item",
+  "schema_version": "2.0",
+  "canvas": {
+    "width": 1080,
+    "height": 1920
+  },
+  "notes": [
+    "Use one source asset for repeated elements and many placements.",
+    "Use full-canvas elements for background, cabinets, boards, frames, floors, large shadows, and effects that must preserve gradients or perspective.",
+    "source_box uses [x, y, width, height] by default. Use source_box_format: xyxy only when supplying [left, top, right, bottom].",
+    "Generated assets are reference-only until validated by recomposition."
+  ],
+  "elements": [
+    {
+      "id": "background_full",
+      "type": "background",
+      "group": "01_background",
+      "source": "source",
+      "source_box": [0, 0, 1080, 1920],
+      "source_box_format": "xywh",
+      "expected_instances": 1,
+      "occlusion_level": "none",
+      "repeat_key": "background_full",
+      "decision": "extract_direct",
+      "preferred_tool": "pillow",
+      "mask_strategy": "none",
+      "full_canvas": true,
+      "generation_prompt": "",
+      "decision_reason": "Full-canvas backplate keeps gradients, lighting, and any broad shadows intact.",
+      "placements": [
+        {
+          "name": "background_full",
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 1920,
+          "rotation": 0,
+          "z_index": 0
+        }
+      ]
+    },
+    {
+      "id": "cabinet_or_board_full",
+      "type": "structure",
+      "group": "02_structures",
+      "source": "empty_base",
+      "source_box": [0, 0, 1080, 1920],
+      "source_box_format": "xywh",
+      "expected_instances": 1,
+      "occlusion_level": "low",
+      "repeat_key": "cabinet_or_board_full",
+      "decision": "extract_direct",
+      "preferred_tool": "pillow",
+      "mask_strategy": "none",
+      "full_canvas": true,
+      "generation_prompt": "",
+      "decision_reason": "A clean/empty base is preferred for shelves, boards, cabinets, and similar large structures.",
+      "placements": [
+        {
+          "name": "cabinet_or_board_full",
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 1920,
+          "rotation": 0,
+          "z_index": 10
+        }
+      ]
+    },
+    {
+      "id": "reusable_clean_object",
+      "type": "foreground_prop",
+      "group": "04_repeated_objects",
+      "source": "source",
+      "source_box": [120, 420, 180, 180],
+      "source_box_format": "xywh",
+      "expected_instances": 3,
+      "occlusion_level": "none",
+      "repeat_key": "object_type_a",
+      "decision": "extract_direct",
+      "preferred_tool": "opencv",
+      "mask_strategy": "auto_subject",
+      "padding": 8,
+      "generation_prompt": "",
+      "decision_reason": "The source instance is complete, has clean edges, and can serve all repeated placements.",
+      "placements": [
+        {
+          "name": "object_type_a_01",
+          "x": 120,
+          "y": 420,
+          "w": 180,
+          "h": 180,
+          "rotation": 0,
+          "z_index": 30
+        },
+        {
+          "name": "object_type_a_02",
+          "x": 320,
+          "y": 420,
+          "w": 180,
+          "h": 180,
+          "rotation": 0,
+          "z_index": 31
+        },
+        {
+          "name": "object_type_a_03",
+          "x": 520,
+          "y": 420,
+          "w": 180,
+          "h": 180,
+          "rotation": 0,
+          "z_index": 32
+        }
+      ]
+    },
+    {
+      "id": "occluded_object_clean_reference",
+      "type": "foreground_prop",
+      "group": "04_repeated_objects",
+      "source": "source",
+      "source_box": [700, 420, 180, 180],
+      "source_box_format": "xywh",
+      "expected_instances": 1,
+      "occlusion_level": "high",
+      "repeat_key": "object_type_b",
+      "decision": "regenerate_clean",
+      "preferred_tool": "gpt-image-2",
+      "mask_strategy": "auto_subject",
+      "padding": 8,
+      "generation_prompt": "Create one isolated reusable game asset: describe the exact object, material, camera angle, lighting, silhouette, palette, and style from the source crop. Center it with generous padding on a solid pure green chroma-key background. No text, no watermark, no extra objects.",
+      "decision_reason": "The visible source object is occluded or edge-contaminated, so it should be generated as a clean reference before it can become a PSD source.",
+      "placements": [
+        {
+          "name": "object_type_b_01",
+          "x": 700,
+          "y": 420,
+          "w": 180,
+          "h": 180,
+          "rotation": 0,
+          "z_index": 33
+        }
+      ]
+    },
+    {
+      "id": "hybrid_repaired_object",
+      "type": "foreground_prop",
+      "group": "03_primary_objects",
+      "source": "source",
+      "source_box": [310, 920, 460, 420],
+      "source_box_format": "xywh",
+      "expected_instances": 1,
+      "occlusion_level": "medium",
+      "repeat_key": "hero_object",
+      "decision": "hybrid_repair",
+      "preferred_tool": "gpt-image-2",
+      "mask_strategy": "grabcut",
+      "padding": 12,
+      "generation_prompt": "Repair the extracted hero object as one isolated game asset. Preserve the source silhouette, scale, material texture, highlights, and top-left lighting. Reconstruct only the contaminated or missing edge areas. Use a solid pure green chroma-key background. No text, no watermark, no extra objects.",
+      "decision_reason": "The source crop is mostly usable, but edge repair or missing small details are required for a clean reusable PSD asset.",
+      "placements": [
+        {
+          "name": "hero_object",
+          "x": 310,
+          "y": 920,
+          "w": 460,
+          "h": 420,
+          "rotation": 0,
+          "z_index": 50
+        }
+      ]
+    }
+  ]
+}
