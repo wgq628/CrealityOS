@@ -1,3 +1,7 @@
+# CrealityOS
+
+需求粉碎系统。This repository contains the local-first Design Copilot / CrealityOS AOS workspace.
+
 # Design Copilot
 
 `design-copilot` is a local-first designer copilot for Feishu Project workflows. It helps you:
