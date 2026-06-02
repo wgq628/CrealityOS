@@ -729,23 +729,34 @@ def render_product_workbench_html(payload: dict) -> str:
     .appShell { min-height: 100vh; display: grid; grid-template-rows: auto 1fr; }
     .commandBar {
       position: sticky; top: 0; z-index: 20;
-      display: grid; grid-template-columns: auto minmax(260px, 1fr) 170px 220px auto auto;
-      gap: 10px; align-items: center;
+      display: grid; grid-template-columns: auto minmax(360px, 1fr) 112px 96px 178px 220px 120px;
+      gap: 10px; align-items: stretch;
       padding: 12px clamp(14px, 2vw, 24px);
       background: rgba(255,253,247,.92);
       border-bottom: 1px solid var(--line);
       backdrop-filter: blur(16px);
       box-shadow: 0 10px 28px rgba(31,37,35,.08);
     }
-    .brandLockup { display: grid; gap: 2px; min-width: 168px; }
+    .brandLockup { display: grid; align-content: center; gap: 2px; min-width: 168px; }
     .brandName { font-family: Georgia, "Times New Roman", "Microsoft YaHei UI", serif; font-size: 24px; line-height: 1; font-weight: 800; }
     .brandMeta { color: var(--muted); font-size: 11px; text-transform: uppercase; }
-    .field, .selectWrap { min-width: 0; }
+    .field, .selectWrap, .intakeGroup { min-width: 0; }
+    .intakeGroup {
+      display: grid; grid-template-rows: auto 1fr auto; gap: 4px;
+      border: 1px solid var(--line); border-radius: 8px; background: #fffaf0;
+      padding: 7px 10px;
+    }
+    .toolbarLabel { color: var(--pine); font-size: 12px; font-weight: 900; line-height: 1.1; }
+    .intakeHint { color: var(--muted); font-size: 11px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .field input, .selectWrap select {
       width: 100%; min-height: 40px;
       border: 1px solid var(--line); border-radius: 6px;
       background: #fffaf0; color: var(--ink);
       padding: 9px 11px; outline: none;
+    }
+    .intakeGroup input {
+      width: 100%; min-height: 26px; border: 0; padding: 0; outline: none;
+      background: transparent; color: var(--ink); font-weight: 650;
     }
     .field input:focus, .selectWrap select:focus { border-color: var(--teal); box-shadow: 0 0 0 3px rgba(15,118,110,.12); }
     .cmdBtn, .ghostBtn, .runBtn {
@@ -760,7 +771,7 @@ def render_product_workbench_html(payload: dict) -> str:
     }
     .workspace { min-width: 0; display: grid; gap: 18px; }
     .workHero {
-      min-height: 190px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, .36fr);
+      min-height: 214px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, .34fr);
       gap: 18px; align-items: stretch;
       border: 1px solid var(--line-dark); border-radius: 8px;
       background: linear-gradient(135deg, #1f2926 0%, #233c38 62%, #695238 100%);
@@ -771,14 +782,29 @@ def render_product_workbench_html(payload: dict) -> str:
     h1 {
       margin: 10px 0 12px;
       font-family: Georgia, "Times New Roman", "Microsoft YaHei UI", serif;
-      font-size: clamp(30px, 4vw, 58px); line-height: 1.02; letter-spacing: 0;
+      font-size: clamp(30px, 3.2vw, 46px); line-height: 1.02; letter-spacing: 0;
       overflow-wrap: anywhere;
     }
     .heroSummary { color: #eee5d5; line-height: 1.62; max-width: 980px; overflow-wrap: anywhere; }
+    .currentTicket {
+      margin-top: 18px; display: grid; gap: 9px;
+      border: 1px solid rgba(255,248,236,.18); border-radius: 8px;
+      background: rgba(255,253,247,.08); padding: 13px;
+    }
+    .ticketLabel { color: #cbd9d3; font-size: 11px; font-weight: 900; text-transform: uppercase; }
+    .ticketName { font-size: 22px; line-height: 1.25; font-weight: 900; overflow-wrap: anywhere; }
+    .ticketSub { color: #efe2ce; line-height: 1.45; overflow-wrap: anywhere; }
+    .ticketMeta { color: #cbd9d3; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
     .heroAside {
       border-left: 1px solid rgba(255,248,236,.18); padding: 20px;
       background: rgba(255,253,247,.08); display: grid; align-content: center; gap: 12px;
     }
+    .sourcePanel {
+      border: 1px solid rgba(255,248,236,.2); border-radius: 6px;
+      padding: 12px; background: rgba(255,253,247,.08); display: grid; gap: 6px;
+    }
+    .sourcePanel b { font-size: 13px; }
+    .sourcePanel span { color: #d7cfc0; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
     .metricStrip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
     .metric {
       min-height: 72px; border: 1px solid rgba(255,248,236,.2); border-radius: 6px;
@@ -899,8 +925,9 @@ def render_product_workbench_html(payload: dict) -> str:
     a { color: inherit; }
     @media (max-width: 1240px) {
       :root { --dock: 340px; }
-      .commandBar { grid-template-columns: auto minmax(220px, 1fr) 150px 190px auto; }
+      .commandBar { grid-template-columns: auto minmax(260px, 1fr) 112px 96px minmax(150px, 1fr); }
       .commandBar .ghostBtn { display: none; }
+      .commandBar .selectWrap:last-of-type { display: none; }
       .contentGrid, .workHero { grid-template-columns: 1fr; }
       .heroAside { border-left: 0; border-top: 1px solid rgba(255,248,236,.18); }
     }
@@ -919,13 +946,18 @@ def render_product_workbench_html(payload: dict) -> str:
     <header class="commandBar">
       <div class="brandLockup">
         <div class="brandName">CrealityOS</div>
-        <div class="brandMeta">Production Workbench</div>
+        <div class="brandMeta">Design Production OS</div>
       </div>
-      <div class="field"><input id="intakeInput" placeholder="飞书项目链接 / 本地需求 / 工作项 ID"></div>
-      <button class="cmdBtn" id="resolveIntake">接单识别</button>
+      <div class="intakeGroup">
+        <div class="toolbarLabel">飞书项目需求链接入口</div>
+        <input id="intakeInput" placeholder="粘贴 project.feishu.cn 需求链接，也可输入本地需求或工作项 ID">
+        <div class="intakeHint" id="sourceLinkHint">飞书项目 / Meegle 链接会映射到本地工作项。</div>
+      </div>
+      <button class="cmdBtn" id="resolveIntake">识别需求</button>
+      <button class="ghostBtn" id="openFeishuLink">打开链接</button>
       <div class="selectWrap"><select id="projectSelect" aria-label="Project"></select></div>
       <div class="selectWrap"><select id="workItemSelect" aria-label="Work item"></select></div>
-      <button class="ghostBtn" id="openSelection">打开工作项</button>
+      <button class="ghostBtn" id="openSelection">打开本地项</button>
     </header>
     <div class="layout">
       <main class="workspace">
@@ -933,12 +965,22 @@ def render_product_workbench_html(payload: dict) -> str:
           <div class="heroCopy">
             <div>
               <div class="eyebrow" id="eyebrow"></div>
-              <h1 id="title">CrealityOS Workbench</h1>
-              <div class="heroSummary" id="summary"></div>
+              <h1 id="title">创意生产操作台</h1>
+              <div class="heroSummary" id="summary">从飞书项目需求进入，完成素材整理、平面需求分析、产出选择、自动档或手动挡执行，以及交付检查。</div>
+              <div class="currentTicket">
+                <div class="ticketLabel">当前需求对象</div>
+                <div class="ticketName" id="taskTitle"></div>
+                <div class="ticketSub" id="taskGame"></div>
+                <div class="ticketMeta" id="taskMeta"></div>
+              </div>
             </div>
             <div class="chipRow" id="heroChips"></div>
           </div>
           <aside class="heroAside">
+            <div class="sourcePanel">
+              <b>需求来源</b>
+              <span id="sourceLinkMeta"></span>
+            </div>
             <div class="metricStrip" id="metrics"></div>
             <button class="cmdBtn" id="reloadState">刷新状态</button>
           </aside>
@@ -1106,6 +1148,14 @@ def render_product_workbench_html(payload: dict) -> str:
       const w = encodeURIComponent(workItemSelect.value || '');
       location.href = `/?project=${p}${w ? `&work_item=${w}` : ''}#overview`;
     };
+    document.getElementById('openFeishuLink').onclick = () => {
+      const raw = document.getElementById('intakeInput').value.trim();
+      if (/^https?:\\/\\//i.test(raw)) {
+        window.open(raw, '_blank', 'noopener,noreferrer');
+      } else {
+        addLog({ok: false, label: '打开飞书项目链接', error: '请先粘贴完整的飞书项目需求链接。'});
+      }
+    };
     document.getElementById('reloadState').onclick = () => location.reload();
     document.getElementById('autoMode').onclick = () => setMode('auto');
     document.getElementById('manualMode').onclick = () => setMode('manual');
@@ -1135,10 +1185,22 @@ def render_product_workbench_html(payload: dict) -> str:
     const artifactIndex = data.artifact_index || {};
     const artifactEntries = Object.entries(artifactIndex);
     const presentArtifacts = artifactEntries.filter(([, value]) => value).length;
+    const sourceLinks = arr(brief.source_links).map(item => String(item || '')).filter(Boolean);
+    const firstSourceLink = sourceLinks.find(item => /^https?:\\/\\//i.test(item)) || '';
+    const currentTaskTitle = brief.title || cockpit.title || c.work_item_id || '未选择需求';
+    const currentGameName = brief.game_name || brief.project_name || '';
 
-    document.getElementById('eyebrow').textContent = `${c.project_key || 'project'} / ${c.work_item_id || 'work item'}`;
-    document.getElementById('title').textContent = brief.game_name || brief.title || cockpit.title || 'CrealityOS Workbench';
-    document.getElementById('summary').textContent = cockpit.summary || brief.source_requirement_summary || brief.summary || '暂无活动设计需求。';
+    if (firstSourceLink) document.getElementById('intakeInput').value = firstSourceLink;
+    document.getElementById('sourceLinkHint').textContent = firstSourceLink
+      ? '已读取到飞书项目需求链接，可直接识别或打开。'
+      : `等待粘贴飞书项目需求链接；当前映射 ${c.project_key || 'project'} / ${c.work_item_id || 'work item'}。`;
+    document.getElementById('sourceLinkMeta').textContent = firstSourceLink || '当前为本地工作项视角。粘贴飞书项目需求链接后，可先识别需求，再映射到本地生产流程。';
+    document.getElementById('eyebrow').textContent = 'CrealityOS / 设计交付控制';
+    document.getElementById('title').textContent = '创意生产操作台';
+    document.getElementById('summary').textContent = '从飞书项目需求进入，完成素材整理、平面需求分析、产出选择、自动档或手动挡执行，以及交付检查。';
+    document.getElementById('taskTitle').textContent = currentTaskTitle;
+    document.getElementById('taskGame').textContent = currentGameName ? `项目 / 游戏名：${currentGameName}` : '项目 / 游戏名：待确认';
+    document.getElementById('taskMeta').textContent = `${c.project_key || 'project'} · ${c.work_item_id || 'work item'} · ${status}`;
     document.getElementById('heroChips').innerHTML = [
       `<span class="chip ${esc(status)}">${esc(status)}</span>`,
       `<span class="chip">${esc(brief.same_category || '品类待确认')}</span>`,
