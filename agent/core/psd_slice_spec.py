@@ -25,6 +25,7 @@ class PsdSliceSpecAuditor:
         slicing_tasks = self._slicing_tasks(psd_handoff_plan, creative_pack, profile)
         naming_examples = self._naming_examples(project_key, work_item_id, psd_handoff_plan, creative_pack, profile)
         findings = [
+            self._candidate_asset_check(psd_handoff_plan),
             self._layer_group_check(required_groups, psd_handoff_plan),
             self._slicing_task_check(slicing_tasks),
             self._naming_check(naming_examples),
@@ -133,6 +134,31 @@ class PsdSliceSpecAuditor:
                 example = example.replace(key, value)
             examples.append(slugify(example, fallback=f"{project_key}_{work_item_id}_{sample_role}_{sample_size}_v001"))
         return list(dict.fromkeys(examples))
+
+    @staticmethod
+    def _candidate_asset_check(psd_handoff_plan: dict[str, Any] | None) -> PsdSliceSpecFinding:
+        if not psd_handoff_plan:
+            return PsdSliceSpecFinding(
+                "CANDIDATE",
+                "PSD 候选资产",
+                "missing_plan",
+                "blocker",
+                ["缺少 PSD 交接计划"],
+                "先运行 create-psd-handoff-plan 生成 PSD 交接计划。",
+            )
+        assets = psd_handoff_plan.get("assets", [])
+        warnings = [str(item) for item in psd_handoff_plan.get("warnings", [])]
+        evidence = [f"候选资产数：{len(assets)}", *warnings[:3]]
+        if not assets:
+            return PsdSliceSpecFinding(
+                "CANDIDATE",
+                "PSD 候选资产",
+                "missing_assets",
+                "blocker",
+                evidence,
+                "先登记生成结果或选择本地候选图，再进入 PSD/切图规格检查。",
+            )
+        return PsdSliceSpecFinding("CANDIDATE", "PSD 候选资产", "pass", "info", evidence)
 
     def _layer_group_check(self, required_groups: list[str], psd_handoff_plan: dict[str, Any] | None) -> PsdSliceSpecFinding:
         actual = set(str(item) for item in (psd_handoff_plan or {}).get("layer_groups", []))

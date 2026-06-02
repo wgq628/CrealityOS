@@ -10,6 +10,7 @@ from agent.core.candidate_comparison import CandidateComparisonMatrixBuilder
 from agent.core.candidate_style_drift import CandidateStyleDriftAuditor
 from agent.core.creative_pack import CreativePackBuilder
 from agent.core.image_production import ImageProductionPlanner
+from agent.core.psd_slice_spec import PsdSliceSpecAuditor
 from agent.core.project_profiles import ProjectProfileManager
 from agent.core.requirement_interpreter import RequirementInterpreter
 from agent.core.risk_detector import RiskDetector
@@ -42,6 +43,27 @@ class CoreLogicTests(unittest.TestCase):
     def tearDown(self) -> None:
         if self.root.exists():
             shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_psd_slice_spec_blocks_without_candidate_assets(self) -> None:
+        report = PsdSliceSpecAuditor().build(
+            project_key="DEMO",
+            work_item_id="1001",
+            psd_handoff_plan={
+                "assets": [],
+                "layer_groups": list(PsdSliceSpecAuditor.REQUIRED_GROUPS),
+                "slicing_tasks": ["CTA button 1080x1920 PNG"],
+                "naming_rules": ["{project_key}-{work_item_id}-{asset_role}-{size}-{version}.png"],
+                "warnings": ["No candidate assets are available for PSD handoff."],
+            },
+            psd_handoff_package={"items": []},
+            creative_pack=None,
+            profile=None,
+            source_artifacts={},
+        )
+
+        self.assertEqual(report.status, "blocked")
+        self.assertTrue(any(finding.check_id == "CANDIDATE" for finding in report.findings))
+        self.assertTrue(any("候选图" in blocker for blocker in report.blockers))
 
     def test_requirement_to_creative_pack(self) -> None:
         context = WorkItemContext(

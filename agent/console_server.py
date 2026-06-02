@@ -545,11 +545,18 @@ def _planar_analysis(payload: dict) -> dict:
 def _output_matrix(payload: dict) -> list[dict]:
     brief = payload.get("design_brief") or (payload.get("creative_pack") or {}).get("brief") or {}
     artifact_index = payload.get("artifact_index") or {}
+    extra_payloads = (payload.get("console") or {}).get("extra_payloads") or {}
+    psd_handoff_plan = extra_payloads.get("psd_handoff_plan") or {}
+    psd_slice_spec = extra_payloads.get("psd_slice_spec_report") or {}
+    delivery_readiness = extra_payloads.get("delivery_readiness_report") or payload.get("delivery_readiness") or {}
     text = json.dumps(brief, ensure_ascii=False).lower()
     deliverables = [item.lower() for item in _as_list(brief.get("deliverables"))]
     needs_image = not deliverables or any(item in {"png", "jpg", "jpeg", "webp", "gif", "mp4"} for item in deliverables)
     needs_psd = "psd" in deliverables or "psd" in text
     needs_slice = "切图" in text or "slice" in text or "slicing" in text
+    psd_status = "blocked" if psd_handoff_plan.get("warnings") and not psd_handoff_plan.get("assets") else ("done" if artifact_index.get("psd_handoff_package") else ("ready" if artifact_index.get("psd_handoff_plan") else "pending"))
+    slice_status = psd_slice_spec.get("status") or ("done" if artifact_index.get("psd_slice_spec_report") else "pending")
+    writeback_status = "blocked" if delivery_readiness.get("status") == "blocked" else ("done" if artifact_index.get("meegle_writeback_draft") else "pending")
     return [
         {
             "output_id": "image",
@@ -565,7 +572,7 @@ def _output_matrix(payload: dict) -> list[dict]:
             "label": "PSD",
             "selected": needs_psd,
             "dependency": "候选图、PSD 交接计划",
-            "status": "done" if artifact_index.get("psd_handoff_package") else ("ready" if artifact_index.get("psd_handoff_plan") else "pending"),
+            "status": psd_status,
             "format": "PSD",
             "next_action": "create_psd_handoff_plan",
         },
@@ -574,7 +581,7 @@ def _output_matrix(payload: dict) -> list[dict]:
             "label": "切图 + 示意图",
             "selected": needs_slice or needs_psd,
             "dependency": "PSD、切图命名、尺寸表",
-            "status": "done" if artifact_index.get("psd_slice_spec_report") else "pending",
+            "status": slice_status,
             "format": "PNG",
             "next_action": "create_psd_slice_spec_report",
         },
@@ -583,7 +590,7 @@ def _output_matrix(payload: dict) -> list[dict]:
             "label": "飞书回写",
             "selected": False,
             "dependency": "评审包、交付检查",
-            "status": "done" if artifact_index.get("meegle_writeback_draft") else "pending",
+            "status": writeback_status,
             "format": "Markdown 草稿",
             "next_action": "create_meegle_writeback_draft",
         },
