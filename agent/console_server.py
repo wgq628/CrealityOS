@@ -682,7 +682,577 @@ def _asset_paths(value, root: Path) -> list[dict]:
     return found
 
 
+def render_product_workbench_html(payload: dict) -> str:
+    data = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
+    title = escape(_page_title(payload))
+    html = """<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>__TITLE__</title>
+  <style>
+    :root {
+      --ink: #1f2523;
+      --muted: #66716c;
+      --paper: #f5f1e8;
+      --surface: #fffdf7;
+      --surface-2: #ece5d7;
+      --line: #d8d0bf;
+      --line-dark: #26312d;
+      --pine: #173a34;
+      --teal: #0f766e;
+      --blue: #315f8c;
+      --amber: #a66416;
+      --red: #a64134;
+      --plum: #6f4d74;
+      --shadow: 0 22px 60px rgba(31, 37, 35, .14);
+      --dock: 380px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(90deg, rgba(38,49,45,.055) 1px, transparent 1px),
+        linear-gradient(rgba(38,49,45,.055) 1px, transparent 1px),
+        radial-gradient(circle at 12% 0%, rgba(166,100,22,.13), transparent 26%),
+        linear-gradient(135deg, #f7f3ea 0%, #ece4d5 58%, #dde8e2 100%);
+      background-size: 38px 38px, 38px 38px, auto, auto;
+      font-family: "Aptos", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+      letter-spacing: 0;
+    }
+    button, input, select, textarea { font: inherit; letter-spacing: 0; }
+    button { cursor: pointer; }
+    button:disabled { cursor: not-allowed; opacity: .48; }
+    .appShell { min-height: 100vh; display: grid; grid-template-rows: auto 1fr; }
+    .commandBar {
+      position: sticky; top: 0; z-index: 20;
+      display: grid; grid-template-columns: auto minmax(260px, 1fr) 170px 220px auto auto;
+      gap: 10px; align-items: center;
+      padding: 12px clamp(14px, 2vw, 24px);
+      background: rgba(255,253,247,.92);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(16px);
+      box-shadow: 0 10px 28px rgba(31,37,35,.08);
+    }
+    .brandLockup { display: grid; gap: 2px; min-width: 168px; }
+    .brandName { font-family: Georgia, "Times New Roman", "Microsoft YaHei UI", serif; font-size: 24px; line-height: 1; font-weight: 800; }
+    .brandMeta { color: var(--muted); font-size: 11px; text-transform: uppercase; }
+    .field, .selectWrap { min-width: 0; }
+    .field input, .selectWrap select {
+      width: 100%; min-height: 40px;
+      border: 1px solid var(--line); border-radius: 6px;
+      background: #fffaf0; color: var(--ink);
+      padding: 9px 11px; outline: none;
+    }
+    .field input:focus, .selectWrap select:focus { border-color: var(--teal); box-shadow: 0 0 0 3px rgba(15,118,110,.12); }
+    .cmdBtn, .ghostBtn, .runBtn {
+      min-height: 40px; border-radius: 6px; border: 1px solid var(--line-dark);
+      background: var(--pine); color: #fffaf0; padding: 9px 13px; font-weight: 800;
+      white-space: nowrap;
+    }
+    .ghostBtn { background: transparent; color: var(--pine); border-color: var(--line); }
+    .layout {
+      display: grid; grid-template-columns: minmax(0, 1fr) var(--dock);
+      gap: 18px; padding: 18px clamp(14px, 2vw, 24px) 34px;
+    }
+    .workspace { min-width: 0; display: grid; gap: 18px; }
+    .workHero {
+      min-height: 190px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, .36fr);
+      gap: 18px; align-items: stretch;
+      border: 1px solid var(--line-dark); border-radius: 8px;
+      background: linear-gradient(135deg, #1f2926 0%, #233c38 62%, #695238 100%);
+      color: #fff8ec; box-shadow: var(--shadow); overflow: hidden;
+    }
+    .heroCopy { padding: 24px; display: flex; flex-direction: column; justify-content: space-between; min-width: 0; }
+    .eyebrow { color: #cbd9d3; font-size: 12px; text-transform: uppercase; font-weight: 900; }
+    h1 {
+      margin: 10px 0 12px;
+      font-family: Georgia, "Times New Roman", "Microsoft YaHei UI", serif;
+      font-size: clamp(30px, 4vw, 58px); line-height: 1.02; letter-spacing: 0;
+      overflow-wrap: anywhere;
+    }
+    .heroSummary { color: #eee5d5; line-height: 1.62; max-width: 980px; overflow-wrap: anywhere; }
+    .heroAside {
+      border-left: 1px solid rgba(255,248,236,.18); padding: 20px;
+      background: rgba(255,253,247,.08); display: grid; align-content: center; gap: 12px;
+    }
+    .metricStrip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .metric {
+      min-height: 72px; border: 1px solid rgba(255,248,236,.2); border-radius: 6px;
+      padding: 11px; background: rgba(255,253,247,.08);
+    }
+    .metric span { display: block; color: #d7cfc0; font-size: 12px; margin-bottom: 5px; }
+    .metric strong { font-size: 24px; }
+    .chipRow { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip {
+      display: inline-flex; align-items: center; min-height: 26px;
+      border: 1px solid #cdbfaa; border-radius: 999px;
+      background: #fffaf0; color: var(--ink); padding: 5px 9px;
+      font-size: 12px; font-weight: 750; line-height: 1.2;
+    }
+    .chip.safe, .chip.done, .chip.ready { color: var(--teal); border-color: rgba(15,118,110,.42); background: #eef8f4; }
+    .chip.confirm, .chip.waiting, .chip.pending, .chip.needs_designer_confirmation { color: var(--amber); border-color: rgba(166,100,22,.45); background: #fff5df; }
+    .chip.locked, .chip.blocked, .chip.fail { color: var(--red); border-color: rgba(166,65,52,.42); background: #fff0ec; }
+    .noticeBar {
+      display: none; border: 1px solid #cda962; border-radius: 8px; background: #fff4d9;
+      color: #553908; padding: 12px 14px; line-height: 1.5;
+    }
+    .section {
+      border: 1px solid var(--line); border-radius: 8px; background: rgba(255,253,247,.9);
+      box-shadow: 0 14px 36px rgba(31,37,35,.08); padding: 16px; min-width: 0;
+    }
+    .sectionHead { display: flex; justify-content: space-between; align-items: end; gap: 12px; margin-bottom: 14px; }
+    h2 { margin: 0; font-size: 18px; line-height: 1.25; }
+    h3 { margin: 0 0 8px; font-size: 14px; line-height: 1.25; }
+    .hint { color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .flowCanvas {
+      position: relative; min-height: 430px; overflow: auto;
+      border: 1px solid #cfc6b5; border-radius: 8px;
+      background:
+        linear-gradient(90deg, rgba(23,58,52,.06) 1px, transparent 1px),
+        linear-gradient(rgba(23,58,52,.06) 1px, transparent 1px),
+        #fbf7ef;
+      background-size: 28px 28px;
+      padding: 18px;
+    }
+    .flowTrack {
+      min-width: 920px; display: grid;
+      grid-template-columns: 1.05fr 1.1fr 1.1fr 1.1fr .9fr 1.1fr 1fr 1.1fr 1fr;
+      gap: 14px; align-items: center;
+    }
+    .flowNode {
+      position: relative; min-height: 116px; border: 1px solid #bfb5a4; border-radius: 8px;
+      background: rgba(255,253,247,.96); padding: 12px;
+      display: grid; align-content: space-between; gap: 12px;
+      box-shadow: 0 10px 20px rgba(31,37,35,.08);
+    }
+    .flowNode:after {
+      content: ""; position: absolute; right: -15px; top: 50%; width: 15px;
+      border-top: 2px solid #7f8f88;
+    }
+    .flowNode:last-child:after { display: none; }
+    .flowNode.branch { min-height: 150px; border-color: var(--teal); background: #f1fbf7; }
+    .flowNode.choice { border-color: var(--amber); background: #fff7e7; }
+    .nodeKicker { color: var(--muted); font-size: 11px; font-weight: 900; text-transform: uppercase; }
+    .nodeTitle { font-weight: 900; font-size: 15px; line-height: 1.25; }
+    .nodeText { color: #45504b; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+    .branchStack { display: grid; gap: 10px; }
+    .contentGrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, .45fr); gap: 18px; }
+    .matrix { display: grid; gap: 9px; }
+    .matrixRow {
+      display: grid; grid-template-columns: 28px minmax(100px, .6fr) minmax(0, 1fr) 92px;
+      gap: 10px; align-items: center;
+      border: 1px solid #e0d6c7; border-radius: 6px; background: #fffaf0; padding: 10px;
+      overflow-wrap: anywhere;
+    }
+    .matrixRow input { width: 18px; height: 18px; }
+    .statusText { font-size: 12px; font-weight: 900; color: var(--blue); }
+    .analysisGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .analysisBlock, .assetLine, .artifactLine, .logItem {
+      border: 1px solid #e0d6c7; border-radius: 6px; background: #fffaf0; padding: 11px;
+      overflow-wrap: anywhere;
+    }
+    .analysisBlock { min-height: 94px; line-height: 1.55; }
+    .assetShelf { display: grid; gap: 10px; }
+    .assetList { display: grid; gap: 8px; max-height: 310px; overflow: auto; }
+    .assetLine { display: grid; gap: 4px; }
+    .assetLine small, .artifactLine small { color: var(--muted); }
+    .previewRail { display: grid; grid-template-columns: repeat(auto-fit, minmax(142px, 1fr)); gap: 9px; }
+    .previewTile { border: 1px solid #e0d6c7; border-radius: 6px; background: #fffaf0; padding: 8px; }
+    .previewTile img {
+      width: 100%; aspect-ratio: 4 / 3; object-fit: contain; display: block;
+      background: #ece4d7; border: 1px solid #ddd2c1; border-radius: 4px;
+    }
+    .artifactGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 9px; }
+    .artifactLine.missing { opacity: .52; }
+    .dock {
+      position: sticky; top: 76px; align-self: start; max-height: calc(100vh - 92px);
+      display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto;
+      border: 1px solid var(--line-dark); border-radius: 8px; overflow: hidden;
+      background: #1f2926; color: #fff8ec; box-shadow: var(--shadow);
+    }
+    .dockHead { padding: 16px; border-bottom: 1px solid rgba(255,248,236,.16); }
+    .modeSwitch {
+      margin-top: 12px; display: grid; grid-template-columns: 1fr 1fr;
+      border: 1px solid rgba(255,248,236,.2); border-radius: 6px; overflow: hidden;
+    }
+    .modeSwitch button { border: 0; background: transparent; color: #fff8ec; min-height: 38px; font-weight: 850; }
+    .modeSwitch button.active { background: #fff8ec; color: var(--pine); }
+    .dockBody { min-height: 0; overflow: auto; padding: 12px; display: grid; gap: 10px; }
+    .actionNode {
+      border: 1px solid rgba(255,248,236,.18); border-radius: 8px;
+      background: rgba(255,253,247,.08); padding: 12px; display: grid; gap: 9px;
+    }
+    .actionNode small { color: #d8d0bf; line-height: 1.45; }
+    .actionNode .produces { color: #b7e5d7; font-size: 12px; line-height: 1.35; }
+    .confirmLine { display: flex; gap: 8px; align-items: center; color: #d8d0bf; font-size: 12px; line-height: 1.35; }
+    .confirmLine input { width: 16px; height: 16px; }
+    .runBtn { width: 100%; background: #fff8ec; color: var(--pine); border-color: #fff8ec; }
+    .dockLog { border-top: 1px solid rgba(255,248,236,.16); padding: 12px; max-height: 220px; overflow: auto; display: grid; gap: 8px; }
+    .logItem { background: rgba(255,253,247,.08); border-color: rgba(255,248,236,.16); color: #fff8ec; line-height: 1.45; }
+    .logItem.ok { border-left: 4px solid #7ed6b5; }
+    .logItem.fail { border-left: 4px solid #df826f; }
+    code { font-family: "Cascadia Mono", "Consolas", monospace; font-size: 12px; }
+    a { color: inherit; }
+    @media (max-width: 1240px) {
+      :root { --dock: 340px; }
+      .commandBar { grid-template-columns: auto minmax(220px, 1fr) 150px 190px auto; }
+      .commandBar .ghostBtn { display: none; }
+      .contentGrid, .workHero { grid-template-columns: 1fr; }
+      .heroAside { border-left: 0; border-top: 1px solid rgba(255,248,236,.18); }
+    }
+    @media (max-width: 980px) {
+      .commandBar { position: relative; grid-template-columns: 1fr; }
+      .layout { grid-template-columns: 1fr; }
+      .dock { position: relative; top: 0; max-height: none; }
+      .analysisGrid { grid-template-columns: 1fr; }
+      .matrixRow { grid-template-columns: 28px 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <script id="console-data" type="application/json">__DATA__</script>
+  <div class="appShell">
+    <header class="commandBar">
+      <div class="brandLockup">
+        <div class="brandName">CrealityOS</div>
+        <div class="brandMeta">Production Workbench</div>
+      </div>
+      <div class="field"><input id="intakeInput" placeholder="飞书项目链接 / 本地需求 / 工作项 ID"></div>
+      <button class="cmdBtn" id="resolveIntake">接单识别</button>
+      <div class="selectWrap"><select id="projectSelect" aria-label="Project"></select></div>
+      <div class="selectWrap"><select id="workItemSelect" aria-label="Work item"></select></div>
+      <button class="ghostBtn" id="openSelection">打开工作项</button>
+    </header>
+    <div class="layout">
+      <main class="workspace">
+        <section class="workHero" id="overview">
+          <div class="heroCopy">
+            <div>
+              <div class="eyebrow" id="eyebrow"></div>
+              <h1 id="title">CrealityOS Workbench</h1>
+              <div class="heroSummary" id="summary"></div>
+            </div>
+            <div class="chipRow" id="heroChips"></div>
+          </div>
+          <aside class="heroAside">
+            <div class="metricStrip" id="metrics"></div>
+            <button class="cmdBtn" id="reloadState">刷新状态</button>
+          </aside>
+        </section>
+        <section class="noticeBar" id="contextNotice"></section>
+        <section class="section" id="flow">
+          <div class="sectionHead">
+            <div>
+              <h2>接单到交付流程</h2>
+              <div class="hint">按项目真实生产顺序组织，不改变后端功能逻辑。</div>
+            </div>
+            <div class="chipRow" id="flowChips"></div>
+          </div>
+          <div class="flowCanvas">
+            <div class="flowTrack">
+              <div class="flowNode">
+                <div class="nodeKicker">Input</div>
+                <div class="nodeTitle">飞书项目链接 / 本地需求输入</div>
+                <div class="nodeText" id="flowInput"></div>
+              </div>
+              <div class="flowNode">
+                <div class="nodeKicker">Wizard</div>
+                <div class="nodeTitle">接单向导</div>
+                <div class="nodeText">识别项目、工作项、标题、当前节点和交付背景。</div>
+              </div>
+              <div class="branchStack">
+                <div class="flowNode branch">
+                  <div class="nodeKicker">Assets</div>
+                  <div class="nodeTitle">素材整理器</div>
+                  <div class="nodeText" id="flowAssets"></div>
+                </div>
+                <div class="flowNode branch">
+                  <div class="nodeKicker">Planar</div>
+                  <div class="nodeTitle">平面需求描述分析器</div>
+                  <div class="nodeText" id="flowPlanar"></div>
+                </div>
+              </div>
+              <div class="flowNode branch">
+                <div class="nodeKicker">Output</div>
+                <div class="nodeTitle">最终产出分析器</div>
+                <div class="nodeText" id="flowOutput"></div>
+              </div>
+              <div class="flowNode">
+                <div class="nodeKicker">Matrix</div>
+                <div class="nodeTitle">产出矩阵</div>
+                <div class="nodeText" id="flowMatrix"></div>
+              </div>
+              <div class="flowNode choice">
+                <div class="nodeKicker">Mode</div>
+                <div class="nodeTitle">模式选择</div>
+                <div class="nodeText">自动档由 Codex 推动安全动作；手动挡由设计师选择功能节点。</div>
+              </div>
+              <div class="flowNode">
+                <div class="nodeKicker">Queue</div>
+                <div class="nodeTitle">安全动作队列 / 功能节点面板</div>
+                <div class="nodeText" id="flowActions"></div>
+              </div>
+              <div class="flowNode">
+                <div class="nodeKicker">Local</div>
+                <div class="nodeTitle">本地产物</div>
+                <div class="nodeText" id="flowArtifacts"></div>
+              </div>
+              <div class="flowNode">
+                <div class="nodeKicker">Deliver</div>
+                <div class="nodeTitle">评审 / PSD / 切图 / 交付</div>
+                <div class="nodeText">先生成评审和交付检查，再进入需要确认的 PSD、切图或回写动作。</div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section class="contentGrid">
+          <section class="section" id="outputs">
+            <div class="sectionHead">
+              <h2>最终产出矩阵</h2>
+              <span class="hint">图片、PSD、切图示意图、回写草稿</span>
+            </div>
+            <div class="matrix" id="outputMatrix"></div>
+          </section>
+          <section class="section" id="analysis">
+            <div class="sectionHead"><h2>需求分析</h2><span class="hint">以平面需求描述为主</span></div>
+            <div class="analysisGrid" id="analysisGrid"></div>
+          </section>
+        </section>
+        <section class="contentGrid">
+          <section class="section" id="assets">
+            <div class="sectionHead">
+              <h2>素材整理器</h2>
+              <div class="chipRow" id="assetCounts"></div>
+            </div>
+            <div class="assetShelf">
+              <div class="previewRail" id="previews"></div>
+              <div class="assetList" id="assetGrid"></div>
+            </div>
+          </section>
+          <section class="section" id="artifacts">
+            <div class="sectionHead"><h2>本地产物索引</h2><span class="hint">交付前检查依据</span></div>
+            <div class="artifactGrid" id="artifactsGrid"></div>
+          </section>
+        </section>
+      </main>
+      <aside class="dock" id="actions">
+        <div class="dockHead">
+          <h2>操作 UI</h2>
+          <div class="hint">自动档跑安全队列，手动挡选择节点。</div>
+          <div class="modeSwitch">
+            <button id="autoMode" class="active">自动档</button>
+            <button id="manualMode">手动挡</button>
+          </div>
+        </div>
+        <div class="dockBody">
+          <div id="autopilotPanel"></div>
+          <div id="manualPanel" hidden></div>
+        </div>
+        <div class="dockLog" id="runLog"></div>
+      </aside>
+    </div>
+  </div>
+  <script>
+    const data = JSON.parse(document.getElementById('console-data').textContent);
+    const c = data.console || {};
+    const cockpit = data.cockpit || {};
+    const brief = data.design_brief || {};
+    const creative = data.creative_pack || {};
+    const workflow = data.workflow_plan || {};
+    const readiness = data.delivery_readiness || {};
+    const workbench = data.workbench || {};
+    const esc = value => String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'","&#039;");
+    const arr = value => Array.isArray(value) ? value.filter(Boolean) : (value ? [value] : []);
+    const joinText = (value, fallback='待确认') => {
+      const items = arr(value);
+      return items.length ? items.join('，') : (value || fallback);
+    };
+    const logBox = document.getElementById('runLog');
+
+    function addLog(item) {
+      const ok = item.ok !== false;
+      const div = document.createElement('div');
+      div.className = `logItem ${ok ? 'ok' : 'fail'}`;
+      const result = item.result ? Object.entries(item.result).slice(0, 5).map(([k, v]) => `${esc(k)}: ${esc(Array.isArray(v) ? v.join(', ') : v)}`).join('<br>') : '';
+      div.innerHTML = `<b>${esc(item.label || item.action_id || '动作')}</b><br><small>${esc(item.finished_at || new Date().toLocaleTimeString())}</small><br>${ok ? result : esc(item.error || '执行失败')}`;
+      logBox.prepend(div);
+    }
+
+    function setMode(mode) {
+      document.body.dataset.mode = mode;
+      document.getElementById('autoMode').classList.toggle('active', mode === 'auto');
+      document.getElementById('manualMode').classList.toggle('active', mode === 'manual');
+      document.getElementById('autopilotPanel').hidden = mode !== 'auto';
+      document.getElementById('manualPanel').hidden = mode !== 'manual';
+      localStorage.setItem('crealityos.mode', mode);
+    }
+
+    function optionLabel(item) {
+      return `${item.work_item_id || item.project_key || ''}${item.title ? ' / ' + item.title : ''}`;
+    }
+
+    const projectSelect = document.getElementById('projectSelect');
+    projectSelect.innerHTML = (c.projects || []).map(p => `<option value="${esc(p.project_key)}">${esc(p.project_key)} / ${esc(p.source || 'local')}</option>`).join('') || `<option value="${esc(c.project_key || '')}">${esc(c.project_key || 'EMPTY')}</option>`;
+    projectSelect.value = c.project_key || projectSelect.value;
+    const workItemSelect = document.getElementById('workItemSelect');
+    workItemSelect.innerHTML = (c.work_items || []).map(item => `<option value="${esc(item.work_item_id)}">${esc(optionLabel(item))}</option>`).join('') || `<option value="">Latest</option>`;
+    workItemSelect.value = c.work_item_id || workItemSelect.value;
+    document.getElementById('openSelection').onclick = () => {
+      const p = encodeURIComponent(projectSelect.value);
+      const w = encodeURIComponent(workItemSelect.value || '');
+      location.href = `/?project=${p}${w ? `&work_item=${w}` : ''}#overview`;
+    };
+    document.getElementById('reloadState').onclick = () => location.reload();
+    document.getElementById('autoMode').onclick = () => setMode('auto');
+    document.getElementById('manualMode').onclick = () => setMode('manual');
+    setMode(localStorage.getItem('crealityos.mode') || 'auto');
+
+    document.getElementById('resolveIntake').onclick = async () => {
+      const response = await fetch('/api/intake/resolve', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({url: document.getElementById('intakeInput').value})
+      });
+      const result = await response.json();
+      addLog({ok: result.ok, label: '接单识别', result, error: (result.warnings || []).join('；')});
+      if (result.project_key) projectSelect.value = result.project_key;
+      if (result.work_item_id) {
+        const option = Array.from(workItemSelect.options).find(item => item.value === result.work_item_id);
+        if (option) workItemSelect.value = result.work_item_id;
+      }
+    };
+
+    const status = cockpit.status || workflow.status || 'draft';
+    const outputRows = workbench.output_matrix || [];
+    const selectedOutputs = outputRows.filter(row => row.selected).map(row => row.label);
+    const inventory = workbench.asset_inventory || {};
+    const actions = workbench.actions?.actions || [];
+    const enabledActions = actions.filter(action => action.enabled && action.tier !== 'locked');
+    const artifactIndex = data.artifact_index || {};
+    const artifactEntries = Object.entries(artifactIndex);
+    const presentArtifacts = artifactEntries.filter(([, value]) => value).length;
+
+    document.getElementById('eyebrow').textContent = `${c.project_key || 'project'} / ${c.work_item_id || 'work item'}`;
+    document.getElementById('title').textContent = brief.game_name || brief.title || cockpit.title || 'CrealityOS Workbench';
+    document.getElementById('summary').textContent = cockpit.summary || brief.source_requirement_summary || brief.summary || '暂无活动设计需求。';
+    document.getElementById('heroChips').innerHTML = [
+      `<span class="chip ${esc(status)}">${esc(status)}</span>`,
+      `<span class="chip">${esc(brief.same_category || '品类待确认')}</span>`,
+      `<span class="chip">Workbench v${esc(workbench.version || '0.2')}</span>`,
+      `<span class="chip">API ${esc(c.routes?.state || '/api/state')} / ${esc(c.routes?.run_action || '/api/action/run')}</span>`
+    ].join('');
+    document.getElementById('metrics').innerHTML = [
+      ['阻塞', (cockpit.blockers || readiness.blockers || []).length],
+      ['待确认', (cockpit.confirmations || []).length],
+      ['素材', inventory.total || 0],
+      ['产物', `${presentArtifacts}/${artifactEntries.length || 0}`],
+    ].map(([label, value]) => `<div class="metric"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('');
+
+    const contextMessages = [...(c.notices || []), ...(c.warnings || [])];
+    if (contextMessages.length) {
+      const notice = document.getElementById('contextNotice');
+      notice.style.display = 'block';
+      notice.innerHTML = `<b>上下文已解析</b><br>${contextMessages.map(esc).join('<br>')}`;
+    }
+
+    document.getElementById('flowChips').innerHTML = [
+      `<span class="chip">自动档 ${esc((workbench.actions?.autopilot_sequence || []).length)}</span>`,
+      `<span class="chip">手动节点 ${esc(actions.length)}</span>`,
+      `<span class="chip">可执行 ${esc(enabledActions.length)}</span>`
+    ].join('');
+    document.getElementById('flowInput').textContent = c.work_item_id ? `当前工作项 ${c.work_item_id}` : '等待输入项目链接或本地需求。';
+    document.getElementById('flowAssets').textContent = `${inventory.total || 0} 个本地素材，覆盖 ${Object.keys(inventory.counts || {}).join('、') || '暂无类型'}。`;
+    document.getElementById('flowPlanar').textContent = (workbench.planar_analysis || {}).summary || '等待读取平面需求描述。';
+    document.getElementById('flowOutput').textContent = selectedOutputs.length ? `建议产出：${selectedOutputs.join('、')}` : '未选定最终产出。';
+    document.getElementById('flowMatrix').textContent = `${outputRows.length} 类产出被纳入矩阵。`;
+    document.getElementById('flowActions').textContent = `安全队列 ${esc((workbench.actions?.autopilot_sequence || []).length)} 个，锁定高风险动作 ${esc(actions.filter(a => a.tier === 'locked').length)} 个。`;
+    document.getElementById('flowArtifacts').textContent = `${presentArtifacts} 个本地产物可用于评审或交付检查。`;
+
+    document.getElementById('outputMatrix').innerHTML = outputRows.map(row => `
+      <div class="matrixRow">
+        <input type="checkbox" data-output="${esc(row.output_id)}" ${row.selected ? 'checked' : ''}>
+        <b>${esc(row.label)}</b>
+        <span>${esc(row.dependency)}<br><small>${esc(row.format)}</small></span>
+        <span class="statusText">${esc(row.status)}</span>
+      </div>
+    `).join('') || '<div class="hint">暂无产出矩阵。</div>';
+
+    const pa = workbench.planar_analysis || {};
+    const analysisBlocks = [
+      ['主依据', pa.primary_source || '平面需求描述'],
+      ['需求摘要', pa.summary || '待确认'],
+      ['风格方向', pa.style_direction || '待确认'],
+      ['尺寸 / 交付', `${joinText(pa.sizes)} / ${joinText(pa.deliverables)}`],
+      ['平台 / 受众', `${joinText(pa.platform)} / ${joinText(pa.target_audience)}`],
+      ['缺失信息', joinText(pa.missing_information, '暂无')],
+    ];
+    document.getElementById('analysisGrid').innerHTML = analysisBlocks.map(([label, value]) => `<div class="analysisBlock"><h3>${esc(label)}</h3>${esc(value)}</div>`).join('');
+
+    async function runAction(action) {
+      const confirmation = action.tier === 'confirm' ? document.getElementById(`confirm-${action.action_id}`)?.checked : false;
+      const payload = {
+        action_id: action.action_id,
+        project_key: c.project_key,
+        work_item_id: c.work_item_id,
+        confirmation: confirmation ? 'confirmed' : undefined
+      };
+      const response = await fetch('/api/action/run', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+      const result = await response.json();
+      addLog(result);
+      if (result.ok) setTimeout(() => location.reload(), 800);
+    }
+
+    function actionNode(action, index) {
+      const locked = !action.enabled || action.tier === 'locked';
+      return `
+        <div class="actionNode">
+          <div class="chipRow"><span class="chip ${esc(action.tier)}">${esc(index + 1)}</span><span class="chip ${esc(action.tier)}">${esc(action.tier)}</span><span class="chip">${esc(action.stage)}</span></div>
+          <b>${esc(action.label)}</b>
+          <small>${esc(action.description)}</small>
+          <div class="produces">${esc((action.produces || []).join(' / '))}</div>
+          ${action.tier === 'confirm' ? `<label class="confirmLine"><input id="confirm-${esc(action.action_id)}" type="checkbox">确认生成执行包或协同草稿</label>` : ''}
+          <button class="runBtn" data-action="${esc(action.action_id)}" ${locked ? 'disabled' : ''}>${locked ? '已锁定' : '执行节点'}</button>
+        </div>
+      `;
+    }
+
+    const autoActions = workbench.actions?.autopilot_sequence || [];
+    document.getElementById('autopilotPanel').innerHTML = autoActions.map(actionNode).join('') || '<div class="hint">暂无自动档动作。</div>';
+    document.getElementById('manualPanel').innerHTML = actions.map(actionNode).join('') || '<div class="hint">暂无手动节点。</div>';
+    document.querySelectorAll('button[data-action]').forEach(button => {
+      const action = actions.find(item => item.action_id === button.dataset.action);
+      button.onclick = () => runAction(action);
+    });
+
+    document.getElementById('assetCounts').innerHTML = Object.entries(inventory.counts || {}).map(([key, value]) => `<span class="chip">${esc(key)} ${esc(value)}</span>`).join('') || '<span class="chip">暂无素材</span>';
+    document.getElementById('assetGrid').innerHTML = (inventory.items || []).slice(0, 28).map(item => `
+      <div class="assetLine"><b>${esc(item.name)}</b><span>${esc(item.type)} / ${esc(item.source)}</span><small>${esc(item.display_path)}</small></div>
+    `).join('') || '<div class="hint">暂无可用素材。</div>';
+    document.getElementById('previews').innerHTML = (data.asset_previews || []).length
+      ? data.asset_previews.map(item => `<div class="previewTile"><img src="${esc(item.url)}" alt=""><small>${esc(item.name)}</small></div>`).join('')
+      : '<div class="hint">暂无本地预览图。</div>';
+    document.getElementById('artifactsGrid').innerHTML = artifactEntries.map(([key, value]) => `
+      <div class="artifactLine ${value ? '' : 'missing'}"><b>${esc(key)}</b><small>${esc(value || '缺失')}</small></div>
+    `).join('') || '<div class="hint">暂无本地产物。</div>';
+  </script>
+</body>
+</html>"""
+    return html.replace("__TITLE__", title).replace("__DATA__", data)
+
+
 def render_console_html(payload: dict) -> str:
+    return render_product_workbench_html(payload)
+
+
+def _legacy_console_html(payload: dict) -> str:
     data = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
     title = escape(_page_title(payload))
     html = """<!doctype html>
