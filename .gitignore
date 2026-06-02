@@ -12,8 +12,13 @@ workspace/runs/*
 !workspace/runs/.gitkeep
 workspace/deliveries/*
 !workspace/deliveries/.gitkeep
+workspace/psd-handoff/*
+!workspace/psd-handoff/.gitkeep
+workspace/smoke-field/*
+workspace/smoke-local/*
 workspace/test-sandboxes/*
 workspace/*.log
+workspace/*.xml
 memory/projects/*
 !memory/projects/.gitkeep
 memory/project_bindings/*

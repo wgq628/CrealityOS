@@ -9,6 +9,9 @@ from agent.models import ProjectProfile, SessionResumeReport, SessionSnapshot, S
 
 class SessionResumeBuilder:
     IMPORTANT_ARTIFACTS = (
+        "制作任务单.md",
+        "中文提示词.md",
+        "交付检查.md",
         "design_brief.md",
         "requirement_clarification_report.md",
         "requirement_change_report.md",

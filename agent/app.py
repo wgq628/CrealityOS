@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
 import json
+from datetime import datetime
+from pathlib import Path
 
 from agent.adapters.lark_doc import LarkDocAdapter
 from agent.adapters.local_files import LocalFileAdapter
@@ -55,6 +56,10 @@ from agent.models import CreativePack, DeliveryItem, DeliveryManifest, DesignBri
 from agent.settings import AppPaths
 from agent.shell import ShellRunner
 from agent.utils import dump_json, load_json, slugify
+
+
+DESIGNER_OUTPUT_MODE = "designer"
+DEBUG_OUTPUT_MODE = "debug"
 
 
 class DesignCopilotApp:
@@ -273,10 +278,29 @@ class DesignCopilotApp:
             "warnings": asset_index.warnings,
         }
 
-    def build_creative_pack(self, project_key: str, work_item_id: str) -> dict:
+    def build_creative_pack(self, project_key: str, work_item_id: str, output_mode: str = DESIGNER_OUTPUT_MODE) -> dict:
         context = self.meegle.fetch_workitem_context(project_key, work_item_id)
         context.docs = self.lark_docs.fetch_docs(context.doc_links)
-        return self._build_creative_pack_from_context(context)
+        return self._build_creative_pack_from_context(context, output_mode=output_mode)
+
+    def process_feishu_requirement(
+        self,
+        project_key: str,
+        work_item_id: str,
+        asset_root: str | None = None,
+        output_mode: str = DESIGNER_OUTPUT_MODE,
+    ) -> dict:
+        result = self.build_creative_pack(project_key=project_key, work_item_id=work_item_id, output_mode=output_mode)
+        if asset_root:
+            asset_result = self.scan_assets(project_key=project_key, asset_root=asset_root)
+            result["asset_index"] = asset_result["asset_index"]
+            result["asset_count"] = asset_result["asset_count"]
+            result["asset_warnings"] = asset_result["warnings"]
+        result["next_actions"] = [
+            f"python -m agent.cli prepare-image-direction --project-key {project_key} --work-item-id {work_item_id}",
+            f"python -m agent.cli prepare-delivery-review --project-key {project_key} --work-item-id {work_item_id}",
+        ]
+        return result
 
     def create_requirement_clarification_report(
         self,
@@ -616,6 +640,7 @@ class DesignCopilotApp:
         requirement_file: str,
         same_category: str | None = None,
         doc_files: list[str] | None = None,
+        output_mode: str = DESIGNER_OUTPUT_MODE,
     ) -> dict:
         context = self._load_local_context(
             project_key=project_key,
@@ -624,7 +649,38 @@ class DesignCopilotApp:
             requirement_file=requirement_file,
             doc_files=doc_files,
         )
-        return self._build_creative_pack_from_context(context, same_category_override=same_category)
+        return self._build_creative_pack_from_context(context, same_category_override=same_category, output_mode=output_mode)
+
+    def process_local_requirement(
+        self,
+        project_key: str,
+        work_item_id: str,
+        title: str,
+        requirement_file: str,
+        same_category: str | None = None,
+        doc_files: list[str] | None = None,
+        asset_root: str | None = None,
+        output_mode: str = DESIGNER_OUTPUT_MODE,
+    ) -> dict:
+        result = self.build_local_creative_pack(
+            project_key=project_key,
+            work_item_id=work_item_id,
+            title=title,
+            requirement_file=requirement_file,
+            same_category=same_category,
+            doc_files=doc_files,
+            output_mode=output_mode,
+        )
+        if asset_root:
+            asset_result = self.scan_assets(project_key=project_key, asset_root=asset_root)
+            result["asset_index"] = asset_result["asset_index"]
+            result["asset_count"] = asset_result["asset_count"]
+            result["asset_warnings"] = asset_result["warnings"]
+        result["next_actions"] = [
+            f"python -m agent.cli prepare-image-direction --project-key {project_key} --work-item-id {work_item_id}",
+            f"python -m agent.cli prepare-delivery-review --project-key {project_key} --work-item-id {work_item_id}",
+        ]
+        return result
 
     def run_local_design_cycle(
         self,
@@ -727,7 +783,9 @@ class DesignCopilotApp:
         self,
         context: WorkItemContext,
         same_category_override: str | None = None,
+        output_mode: str = DESIGNER_OUTPUT_MODE,
     ) -> dict:
+        write_debug_markdown = output_mode == DEBUG_OUTPUT_MODE
         project_key = context.project_key or "unknown-project"
         work_item_id = context.work_item_id
         field_mapping = self.store.load_field_mapping(project_key)
@@ -754,11 +812,11 @@ class DesignCopilotApp:
         creative_pack = self.pack_builder.build(brief, style_card, profile)
 
         output_dir = self.local_files.prepare_run_directory(project_key, work_item_id, context.title)
-        self._write_brief(output_dir, brief)
-        memory_paths = self._write_requirement_memory_report(output_dir, memory_report)
-        clarification_paths = self._write_requirement_clarification(output_dir, brief)
-        self._write_style_card(output_dir, style_card)
-        self._write_creative_pack(output_dir, creative_pack)
+        brief_paths = self._write_brief(output_dir, brief, write_markdown=write_debug_markdown)
+        memory_paths = self._write_requirement_memory_report(output_dir, memory_report, write_markdown=write_debug_markdown)
+        clarification_paths = self._write_requirement_clarification(output_dir, brief, write_markdown=write_debug_markdown)
+        style_paths = self._write_style_card(output_dir, style_card, write_markdown=write_debug_markdown)
+        creative_paths = self._write_creative_pack(output_dir, creative_pack, write_markdown=write_debug_markdown)
         style_transfer_paths = self._write_style_transfer_report(
             output_dir=output_dir,
             project_key=project_key,
@@ -767,20 +825,48 @@ class DesignCopilotApp:
             effective_style=style_card,
             profile=profile,
             creative_pack_path=output_dir / "creative_pack.json",
+            write_markdown=write_debug_markdown,
         )
-        style_alignment_paths = self._write_style_alignment_report(output_dir, creative_pack)
-        decision_record_paths = self._write_design_decision_record(output_dir, creative_pack)
-        self._write_delivery_manifest(output_dir, creative_pack)
-        image_batch_paths = self._write_image_production_batch(output_dir, creative_pack, profile)
+        style_alignment_paths = self._write_style_alignment_report(output_dir, creative_pack, write_markdown=write_debug_markdown)
+        decision_record_paths = self._write_design_decision_record(output_dir, creative_pack, write_markdown=write_debug_markdown)
+        manifest_paths = self._write_delivery_manifest(output_dir, creative_pack, write_markdown=write_debug_markdown)
+        image_batch_paths = self._write_image_production_batch(output_dir, creative_pack, profile, write_markdown=write_debug_markdown)
+        designer_paths = self._write_designer_workpack(
+            output_dir=output_dir,
+            memory_project_key=memory_project_key,
+            creative_pack=creative_pack,
+            memory_report_path=Path(memory_paths[0]),
+            style_transfer_path=Path(style_transfer_paths[0]),
+            style_alignment_path=Path(style_alignment_paths[0]),
+            image_batch_path=Path(image_batch_paths[0]),
+            mode=output_mode,
+        )
 
         self.store.save_style_card(style_card)
         snapshot = self.session_manager.build_snapshot(creative_pack, output_dir)
-        snapshot.last_artifacts.extend(memory_paths + clarification_paths + style_transfer_paths + style_alignment_paths + decision_record_paths + image_batch_paths)
+        snapshot.last_artifacts = []
+        snapshot.last_artifacts.extend(
+            brief_paths
+            + memory_paths
+            + clarification_paths
+            + style_paths
+            + creative_paths
+            + style_transfer_paths
+            + style_alignment_paths
+            + decision_record_paths
+            + manifest_paths
+            + image_batch_paths
+            + designer_paths
+        )
         snapshot.memory_project_key = memory_project_key
         self.store.save_session_snapshot(snapshot)
 
         return {
             "output_dir": str(output_dir),
+            "output_mode": output_mode,
+            "designer_workpack": str(Path(designer_paths[0]).parent) if designer_paths else None,
+            "task_sheet": designer_paths[0] if designer_paths else None,
+            "prompt_sheet": designer_paths[1] if len(designer_paths) > 1 else None,
             "artifacts": snapshot.last_artifacts,
             "same_category": brief.same_category,
             "uncertainties": creative_pack.uncertainties,
@@ -1287,7 +1373,7 @@ class DesignCopilotApp:
             "approval_checklist": draft.approval_checklist,
         }
 
-    def create_delivery_readiness_report(self, project_key: str, work_item_id: str | None = None) -> dict:
+    def create_delivery_readiness_report(self, project_key: str, work_item_id: str | None = None, write_markdown: bool = True) -> dict:
         snapshot = self.store.load_session_snapshot(project_key)
         effective_work_item_id = work_item_id or (snapshot.active_work_item_id if snapshot else None)
         if not effective_work_item_id:
@@ -1341,19 +1427,117 @@ class DesignCopilotApp:
         json_path = report_dir / "delivery_readiness_report.json"
         md_path = report_dir / "delivery_readiness_report.md"
         dump_json(json_path, to_plain_data(report))
-        md_path.write_text(self.delivery_readiness.render_markdown(report), encoding="utf-8")
-        artifacts = [str(json_path), str(md_path)]
+        artifacts = [str(json_path)]
+        if write_markdown:
+            md_path.write_text(self.delivery_readiness.render_markdown(report), encoding="utf-8")
+            artifacts.append(str(md_path))
         if snapshot:
             snapshot.last_artifacts.extend(path for path in artifacts if path not in snapshot.last_artifacts)
             self.store.save_session_snapshot(snapshot)
-        return {
+        result = {
             "delivery_readiness_report": str(json_path),
-            "delivery_readiness_report_md": str(md_path),
             "status": report.status,
             "blocking_items": report.blocking_items,
             "warnings": report.warnings,
             "approval_checklist": report.approval_checklist,
         }
+        if write_markdown:
+            result["delivery_readiness_report_md"] = str(md_path)
+        return result
+
+    def prepare_image_direction(self, project_key: str, work_item_id: str | None = None) -> dict:
+        snapshot = self.store.load_session_snapshot(project_key)
+        if not snapshot:
+            raise FileNotFoundError(f"No session snapshot found for project: {project_key}")
+        if work_item_id and snapshot.active_work_item_id != work_item_id:
+            raise ValueError(
+                f"Latest snapshot is for work item {snapshot.active_work_item_id}, not requested work item {work_item_id}."
+            )
+        output_dir = Path(snapshot.output_dir)
+        creative_pack = self._load_creative_pack_from_output_dir(output_dir)
+        profile_key = snapshot.memory_project_key or self._resolve_memory_project_key(project_key, snapshot.active_work_item_id)
+        profile = self.store.load_project_profile(profile_key)
+        image_batch_paths = self._write_image_production_batch(output_dir, creative_pack, profile, write_markdown=False)
+        image_batch = load_json(Path(image_batch_paths[0]), {})
+        state_path = self._designer_workpack_state_path(snapshot)
+        state_payload = load_json(state_path, {}) if state_path else {}
+        prompt_path = self._designer_visible_path(state_payload, "prompt_sheet") or (output_dir / "中文提示词.md")
+        prompt_path.parent.mkdir(parents=True, exist_ok=True)
+        prompt_path.write_text(self._render_designer_prompt_sheet(creative_pack, image_batch), encoding="utf-8")
+        if state_path:
+            state_payload.setdefault("visible_files", {})["prompt_sheet"] = str(prompt_path)
+            state_payload.setdefault("system_artifacts", {})["image_generation_batch"] = image_batch_paths[0]
+            dump_json(state_path, state_payload)
+        artifacts = image_batch_paths + [str(prompt_path)]
+        if state_path:
+            artifacts.append(str(state_path))
+        snapshot.last_artifacts.extend(path for path in artifacts if path not in snapshot.last_artifacts)
+        self.store.save_session_snapshot(snapshot)
+        return {
+            "image_generation_batch": image_batch_paths[0],
+            "prompt_sheet": str(prompt_path),
+            "variant_count": len(image_batch.get("variants", [])) if isinstance(image_batch, dict) else 0,
+            "artifacts": artifacts,
+        }
+
+    def prepare_delivery_review(self, project_key: str, work_item_id: str | None = None) -> dict:
+        snapshot = self.store.load_session_snapshot(project_key)
+        effective_work_item_id = work_item_id or (snapshot.active_work_item_id if snapshot else None)
+        if not effective_work_item_id:
+            raise ValueError("work_item_id is required when no session snapshot exists.")
+        readiness = self.create_delivery_readiness_report(
+            project_key=project_key,
+            work_item_id=effective_work_item_id,
+            write_markdown=False,
+        )
+        output_dir = Path(snapshot.output_dir) if snapshot else self.paths.workspace / slugify(project_key, fallback="project") / f"{effective_work_item_id}-delivery-readiness"
+        readiness_payload = load_json(Path(readiness["delivery_readiness_report"]), {})
+        state_path = self._designer_workpack_state_path(snapshot) if snapshot else None
+        state_payload = load_json(state_path, {}) if state_path else {}
+        review_path = self._designer_visible_path(state_payload, "delivery_review_sheet") or (
+            (state_path.parent.parent / "交付检查.md") if state_path else (output_dir / "交付检查.md")
+        )
+        review_path.parent.mkdir(parents=True, exist_ok=True)
+        review_path.write_text(self._render_delivery_review_sheet(readiness_payload), encoding="utf-8")
+        if state_path:
+            state_payload.setdefault("visible_files", {})["delivery_review_sheet"] = str(review_path)
+            state_payload.setdefault("system_artifacts", {})["delivery_readiness_report"] = readiness["delivery_readiness_report"]
+            dump_json(state_path, state_payload)
+        if snapshot:
+            artifacts_to_add = [str(review_path)]
+            if state_path:
+                artifacts_to_add.append(str(state_path))
+            snapshot.last_artifacts.extend(path for path in artifacts_to_add if path not in snapshot.last_artifacts)
+            self.store.save_session_snapshot(snapshot)
+        artifacts = [readiness["delivery_readiness_report"], str(review_path)]
+        if state_path:
+            artifacts.append(str(state_path))
+        return {
+            "delivery_readiness_report": readiness["delivery_readiness_report"],
+            "delivery_review_sheet": str(review_path),
+            "status": readiness["status"],
+            "blocking_items": readiness["blocking_items"],
+            "warnings": readiness["warnings"],
+            "artifacts": artifacts,
+        }
+
+    @staticmethod
+    def _designer_workpack_state_path(snapshot: SessionSnapshot | None) -> Path | None:
+        if not snapshot:
+            return None
+        for artifact in reversed(snapshot.last_artifacts):
+            candidate = Path(artifact)
+            if candidate.name == "state.json" and candidate.parent.name == "_system" and candidate.exists():
+                return candidate
+        return None
+
+    @staticmethod
+    def _designer_visible_path(state_payload: dict, key: str) -> Path | None:
+        visible_files = state_payload.get("visible_files") if isinstance(state_payload, dict) else None
+        if not isinstance(visible_files, dict):
+            return None
+        value = visible_files.get(key)
+        return Path(value) if value else None
 
     def create_designer_review_packet(self, project_key: str, work_item_id: str | None = None) -> dict:
         snapshot = self.store.load_session_snapshot(project_key)
@@ -1751,10 +1935,10 @@ class DesignCopilotApp:
 
     @staticmethod
     def _memory_project_key_from_brief(brief: DesignBrief, fallback_project_key: str) -> str:
-        if brief.game_project_id and brief.game_project_id != "待确认":
-            return str(brief.game_project_id)
         if brief.game_name and brief.game_name != "待确认":
             return slugify(brief.game_name, fallback=fallback_project_key)
+        if brief.game_project_id and brief.game_project_id != "待确认":
+            return str(brief.game_project_id)
         return fallback_project_key
 
     @staticmethod
@@ -2029,8 +2213,225 @@ class DesignCopilotApp:
             "next_commands": report.next_commands,
         }
 
-    def _write_brief(self, output_dir: Path, brief: DesignBrief) -> None:
-        dump_json(output_dir / "design_brief.json", to_plain_data(brief))
+    def _write_designer_workpack(
+        self,
+        output_dir: Path,
+        memory_project_key: str,
+        creative_pack: CreativePack,
+        memory_report_path: Path,
+        style_transfer_path: Path,
+        style_alignment_path: Path,
+        image_batch_path: Path,
+        mode: str,
+    ) -> list[str]:
+        brief = creative_pack.brief
+        safe_project = slugify(brief.project_key or "project", fallback="project")
+        safe_item = slugify(brief.work_item_id or "item", fallback="item")
+        safe_game = slugify(brief.game_name if brief.game_name != "待确认" else brief.title, fallback="game")
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        workpack_dir = (
+            self.paths.root
+            / "workspace"
+            / "deliveries"
+            / safe_project
+            / f"{safe_item}-{safe_game}-designer-workpack-{stamp}"
+        )
+        prompt_dir = workpack_dir / "03_垫图与提示词"
+        system_dir = workpack_dir / "_system"
+        for path in (
+            workpack_dir / "01_需求素材",
+            workpack_dir / "02_风格参考",
+            prompt_dir,
+            workpack_dir / "04_候选效果图",
+            workpack_dir / "05_PSD交付",
+            workpack_dir / "06_最终交付",
+            system_dir,
+        ):
+            path.mkdir(parents=True, exist_ok=True)
+
+        image_batch = load_json(image_batch_path, {})
+        style_transfer = load_json(style_transfer_path, {})
+        style_alignment = load_json(style_alignment_path, {})
+        task_sheet = workpack_dir / "制作任务单.md"
+        prompt_sheet = prompt_dir / "中文提示词.md"
+        state_path = system_dir / "state.json"
+
+        task_sheet.write_text(
+            self._render_designer_task_sheet(
+                creative_pack=creative_pack,
+                memory_project_key=memory_project_key,
+                style_transfer=style_transfer,
+                style_alignment=style_alignment,
+                image_batch=image_batch,
+            ),
+            encoding="utf-8",
+        )
+        prompt_sheet.write_text(self._render_designer_prompt_sheet(creative_pack, image_batch), encoding="utf-8")
+        dump_json(
+            state_path,
+            {
+                "mode": mode,
+                "source_run_dir": str(output_dir),
+                "project_key": brief.project_key,
+                "work_item_id": brief.work_item_id,
+                "memory_project_key": memory_project_key,
+                "game_name": brief.game_name,
+                "visible_files": {
+                    "task_sheet": str(task_sheet),
+                    "prompt_sheet": str(prompt_sheet),
+                },
+                "system_artifacts": {
+                    "design_brief": str(output_dir / "design_brief.json"),
+                    "creative_pack": str(output_dir / "creative_pack.json"),
+                    "requirement_memory_report": str(memory_report_path),
+                    "style_transfer_report": str(style_transfer_path),
+                    "style_alignment_report": str(style_alignment_path),
+                    "image_generation_batch": str(image_batch_path),
+                },
+                "policy": {
+                    "designer_visible_default": ["制作任务单.md", "03_垫图与提示词/中文提示词.md"],
+                    "debug_reports": "单独执行 create-* 报告命令时再生成详细 MD。",
+                    "first_image_rule": "先做整体效果图，效果确认后再拆资源、进 PSD 和切图。",
+                },
+            },
+        )
+        return [str(task_sheet), str(prompt_sheet), str(state_path)]
+
+    def _render_designer_task_sheet(
+        self,
+        creative_pack: CreativePack,
+        memory_project_key: str,
+        style_transfer: dict,
+        style_alignment: dict,
+        image_batch: dict,
+    ) -> str:
+        brief = creative_pack.brief
+        confirmed_rules = [
+            rule.statement
+            for rule in creative_pack.style_card.rules
+            if str(rule.level) in {"K1", "K2", "KnowledgeLevel.K1", "KnowledgeLevel.K2"}
+        ][:8]
+        variants = image_batch.get("variants", []) if isinstance(image_batch, dict) else []
+        first_variant = variants[0] if variants else {}
+        lines = [
+            f"# 制作任务单 - {brief.title}",
+            "",
+            "## 项目结论",
+            f"- 飞书项目：`{brief.project_key}` / `{brief.work_item_id}`",
+            f"- 游戏记忆：`{memory_project_key}`",
+            f"- 游戏名称：{brief.game_name}",
+            f"- 玩法理解：{brief.gameplay_summary}",
+            f"- 默认尺寸：{', '.join(brief.sizes) if brief.sizes else '平面+视频需求默认先做 9:16 / 1080x1920'}",
+            f"- 最终交付：{', '.join(brief.deliverables) if brief.deliverables else '待确认'}",
+            "",
+            "## 要做什么",
+            brief.objective or brief.summary,
+            "",
+            "## 平面需求描述提炼",
+            brief.source_requirement_summary or brief.summary,
+            "",
+            "## 可用资源",
+            *(f"- {item}" for item in (brief.reference_assets + brief.source_links)[:20] or ["暂无明确可用资源，需设计师补充或从项目资料中继续筛选。"]),
+            "",
+            "## 风格边界",
+            f"- 风格闸门：`{style_alignment.get('status', '待检查')}`",
+            f"- 风格迁移：`{style_transfer.get('status', '待检查')}`",
+            *(f"- {item}" for item in confirmed_rules or ["暂无可执行 K1/K2 风格规则，先以需求描述和同游戏风格参考为主。"]),
+            "",
+            "## 首轮整体效果图",
+            "- 先生成完整 9:16 效果图，确认画面成立后再拆资源、进 PSD 和切图。",
+            f"- 首选方向：{first_variant.get('variant_id', 'V01')} {first_variant.get('title', '稳定项目风格版')}",
+            f"- 画面意图：{first_variant.get('intent', '贴合需求主目标，优先保证游戏风格和信息层级。')}",
+            "",
+            "## 垫图策略",
+            "- 同游戏历史优秀图：只用于风格、UI气质、玩法识别。",
+            "- 需求草图或布局图：只用于构图和主体位置，不直接继承风格。",
+            "- 物件参考图：只用于形体、材质、结构，不控制整体画风。",
+            "- 非同游戏参考视频：只用于动作逻辑或节奏，不能纳入风格参考。",
+            "",
+            "## 缺失信息 / 风险",
+            *(f"- {item}" for item in list(dict.fromkeys(brief.missing_information + brief.risk_points)) or ["暂无阻塞信息。"]),
+            "",
+            "## 下一步",
+            "- 设计师先看本文件和 `03_垫图与提示词/中文提示词.md`。",
+            "- 先做整体效果图候选，不要一开始拆花篮、背景、UI、PSD图层。",
+            "- 候选图通过后，再进入 PSD 人工精修、切图和多尺寸拓展。",
+        ]
+        return "\n".join(lines)
+
+    @staticmethod
+    def _render_designer_prompt_sheet(creative_pack: CreativePack, image_batch: dict) -> str:
+        brief = creative_pack.brief
+        variants = image_batch.get("variants", []) if isinstance(image_batch, dict) else []
+        lines = [
+            f"# 中文提示词 - {brief.title}",
+            "",
+            "## 使用原则",
+            "- 第一轮先做整体效果图，不拆单个资源。",
+            "- 以平面需求描述为主，游戏风格记忆为约束，垫图只按各自用途参与。",
+            "- 效果图通过后，再拆资源、进 PSD、做切图和多尺寸拓展。",
+            "",
+        ]
+        if not variants:
+            lines.extend(
+                [
+                    "## 整体效果图提示词",
+                    "，".join(creative_pack.prompt_pack.positive),
+                    "",
+                    "## 负面提示词",
+                    "，".join(creative_pack.prompt_pack.negative),
+                ]
+            )
+            return "\n".join(lines)
+
+        for variant in variants:
+            lines.extend(
+                [
+                    f"## {variant.get('variant_id', 'V')} {variant.get('title', '整体效果图方案')}",
+                    "",
+                    "### 正向提示词",
+                    variant.get("positive_prompt", ""),
+                    "",
+                    "### 负向提示词",
+                    variant.get("negative_prompt", ""),
+                    "",
+                    "### 垫图说明",
+                    *(f"- {item}" for item in variant.get("reference_policy", []) or creative_pack.prompt_pack.reference_groups or ["按制作任务单里的垫图策略执行。"]),
+                    "",
+                ]
+            )
+        return "\n".join(lines)
+
+    @staticmethod
+    def _render_delivery_review_sheet(readiness: dict) -> str:
+        lines = [
+            f"# 交付检查 - {readiness.get('work_item_id', '未绑定')}",
+            "",
+            f"- 状态：`{readiness.get('status', 'unknown')}`",
+            f"- 需要设计师确认：{'是' if readiness.get('requires_designer_confirmation') else '否'}",
+            "",
+            "## 阻塞项",
+            *(f"- {item}" for item in readiness.get("blocking_items", []) or ["无"]),
+            "",
+            "## 风险提醒",
+            *(f"- {item}" for item in readiness.get("warnings", []) or ["无"]),
+            "",
+            "## 人工确认清单",
+            *(f"- [ ] {item}" for item in readiness.get("approval_checklist", []) or ["确认最终图、PSD、切图、命名、尺寸和格式均与飞书项目需求一致。"]),
+            "",
+            "## 交付原则",
+            "- 只有定稿 9:16 效果图通过后，才拓展其他尺寸。",
+            "- PSD 和切图基于定稿效果图，不在首轮效果图阶段过早拆资源。",
+            "- 正式回写飞书项目前，先人工确认交付文件夹内容。",
+        ]
+        return "\n".join(lines)
+
+    def _write_brief(self, output_dir: Path, brief: DesignBrief, write_markdown: bool = True) -> list[str]:
+        json_path = output_dir / "design_brief.json"
+        dump_json(json_path, to_plain_data(brief))
+        artifacts = [str(json_path)]
+        if not write_markdown:
+            return artifacts
         markdown = "\n".join(
             [
                 f"# 设计需求卡 - {brief.title}",
@@ -2067,27 +2468,42 @@ class DesignCopilotApp:
                 *(f"- {item}" for item in brief.missing_information),
             ]
         )
-        (output_dir / "design_brief.md").write_text(markdown, encoding="utf-8")
+        md_path = output_dir / "design_brief.md"
+        md_path.write_text(markdown, encoding="utf-8")
+        artifacts.append(str(md_path))
+        return artifacts
 
-    def _write_requirement_memory_report(self, output_dir: Path, report: RequirementMemoryReport) -> list[str]:
+    def _write_requirement_memory_report(self, output_dir: Path, report: RequirementMemoryReport, write_markdown: bool = True) -> list[str]:
         json_path = output_dir / "requirement_memory_report.json"
-        md_path = output_dir / "requirement_memory_report.md"
         dump_json(json_path, to_plain_data(report))
+        artifacts = [str(json_path)]
+        if not write_markdown:
+            return artifacts
+        md_path = output_dir / "requirement_memory_report.md"
         md_path.write_text(self.requirement_memory.render_markdown(report), encoding="utf-8")
-        return [str(json_path), str(md_path)]
+        artifacts.append(str(md_path))
+        return artifacts
 
-    def _write_requirement_clarification(self, output_dir: Path, brief: DesignBrief) -> list[str]:
+    def _write_requirement_clarification(self, output_dir: Path, brief: DesignBrief, write_markdown: bool = True) -> list[str]:
         report = self.requirement_clarifier.build(brief, brief.risk_points)
         json_path = output_dir / "requirement_clarification_report.json"
+        dump_json(json_path, to_plain_data(report))
+        artifacts = [str(json_path)]
+        if not write_markdown:
+            return artifacts
         md_path = output_dir / "requirement_clarification_report.md"
         comment_path = output_dir / "requirement_clarification_comment.md"
-        dump_json(json_path, to_plain_data(report))
         md_path.write_text(self.requirement_clarifier.render_markdown(report), encoding="utf-8")
         comment_path.write_text(report.comment_draft, encoding="utf-8")
-        return [str(json_path), str(md_path), str(comment_path)]
+        artifacts.extend([str(md_path), str(comment_path)])
+        return artifacts
 
-    def _write_style_card(self, output_dir: Path, style_card: StyleCard) -> None:
-        dump_json(output_dir / "style_card.json", to_plain_data(style_card))
+    def _write_style_card(self, output_dir: Path, style_card: StyleCard, write_markdown: bool = True) -> list[str]:
+        json_path = output_dir / "style_card.json"
+        dump_json(json_path, to_plain_data(style_card))
+        artifacts = [str(json_path)]
+        if not write_markdown:
+            return artifacts
         rules = [f"- [{rule.level}] {rule.statement} | {rule.rationale}" for rule in style_card.rules] or ["- 暂无已沉淀规则"]
         markdown = "\n".join(
             [
@@ -2103,10 +2519,17 @@ class DesignCopilotApp:
                 *(f"- {item}" for item in style_card.open_questions),
             ]
         )
-        (output_dir / "style_card.md").write_text(markdown, encoding="utf-8")
+        md_path = output_dir / "style_card.md"
+        md_path.write_text(markdown, encoding="utf-8")
+        artifacts.append(str(md_path))
+        return artifacts
 
-    def _write_creative_pack(self, output_dir: Path, creative_pack: CreativePack) -> None:
-        dump_json(output_dir / "creative_pack.json", to_plain_data(creative_pack))
+    def _write_creative_pack(self, output_dir: Path, creative_pack: CreativePack, write_markdown: bool = True) -> list[str]:
+        json_path = output_dir / "creative_pack.json"
+        dump_json(json_path, to_plain_data(creative_pack))
+        artifacts = [str(json_path)]
+        if not write_markdown:
+            return artifacts
         prompt_positive = "\n".join(f"- {item}" for item in creative_pack.prompt_pack.positive)
         prompt_negative = "\n".join(f"- {item}" for item in creative_pack.prompt_pack.negative)
         references = "\n".join(f"- {item}" for item in creative_pack.references)
@@ -2145,9 +2568,12 @@ class DesignCopilotApp:
                 uncertainties,
             ]
         )
-        (output_dir / "creative_pack.md").write_text(markdown, encoding="utf-8")
+        md_path = output_dir / "creative_pack.md"
+        md_path.write_text(markdown, encoding="utf-8")
+        artifacts.append(str(md_path))
+        return artifacts
 
-    def _write_style_alignment_report(self, output_dir: Path, creative_pack: CreativePack) -> list[str]:
+    def _write_style_alignment_report(self, output_dir: Path, creative_pack: CreativePack, write_markdown: bool = True) -> list[str]:
         source_artifacts = {
             "design_brief": str(output_dir / "design_brief.json") if (output_dir / "design_brief.json").exists() else None,
             "style_card": str(output_dir / "style_card.json") if (output_dir / "style_card.json").exists() else None,
@@ -2155,10 +2581,14 @@ class DesignCopilotApp:
         }
         report = self.style_alignment.build(creative_pack, source_artifacts=source_artifacts)
         json_path = output_dir / "style_alignment_report.json"
-        md_path = output_dir / "style_alignment_report.md"
         dump_json(json_path, to_plain_data(report))
+        artifacts = [str(json_path)]
+        if not write_markdown:
+            return artifacts
+        md_path = output_dir / "style_alignment_report.md"
         md_path.write_text(self.style_alignment.render_markdown(report), encoding="utf-8")
-        return [str(json_path), str(md_path)]
+        artifacts.append(str(md_path))
+        return artifacts
 
     def _write_style_transfer_report(
         self,
@@ -2169,6 +2599,7 @@ class DesignCopilotApp:
         effective_style: StyleCard | None,
         profile: ProjectProfile | None,
         creative_pack_path: Path | None,
+        write_markdown: bool = True,
     ) -> list[str]:
         style_card_path = output_dir / "style_card.json"
         profile_path = self.paths.memory / "projects" / project_key / "project_profile.json"
@@ -2188,12 +2619,16 @@ class DesignCopilotApp:
             },
         )
         json_path = output_dir / "style_transfer_report.json"
-        md_path = output_dir / "style_transfer_report.md"
         dump_json(json_path, to_plain_data(report))
+        artifacts = [str(json_path)]
+        if not write_markdown:
+            return artifacts
+        md_path = output_dir / "style_transfer_report.md"
         md_path.write_text(self.style_transfer.render_markdown(report), encoding="utf-8")
-        return [str(json_path), str(md_path)]
+        artifacts.append(str(md_path))
+        return artifacts
 
-    def _write_design_decision_record(self, output_dir: Path, creative_pack: CreativePack) -> list[str]:
+    def _write_design_decision_record(self, output_dir: Path, creative_pack: CreativePack, write_markdown: bool = True) -> list[str]:
         source_artifacts = {
             "design_brief": str(output_dir / "design_brief.json") if (output_dir / "design_brief.json").exists() else None,
             "requirement_clarification": str(output_dir / "requirement_clarification_report.json") if (output_dir / "requirement_clarification_report.json").exists() else None,
@@ -2208,20 +2643,28 @@ class DesignCopilotApp:
             source_artifacts=source_artifacts,
         )
         json_path = output_dir / "design_decision_record.json"
-        md_path = output_dir / "design_decision_record.md"
         dump_json(json_path, to_plain_data(record))
+        artifacts = [str(json_path)]
+        if not write_markdown:
+            return artifacts
+        md_path = output_dir / "design_decision_record.md"
         md_path.write_text(self.decision_recorder.render_markdown(record), encoding="utf-8")
-        return [str(json_path), str(md_path)]
+        artifacts.append(str(md_path))
+        return artifacts
 
-    def _write_image_production_batch(self, output_dir: Path, creative_pack: CreativePack, profile: ProjectProfile | None) -> list[str]:
+    def _write_image_production_batch(self, output_dir: Path, creative_pack: CreativePack, profile: ProjectProfile | None, write_markdown: bool = True) -> list[str]:
         batch = self.image_production_planner.build(creative_pack, profile, str(output_dir))
         json_path = output_dir / "image_generation_batch.json"
+        dump_json(json_path, to_plain_data(batch))
+        artifacts = [str(json_path)]
+        if not write_markdown:
+            return artifacts
         md_path = output_dir / "image_generation_batch.md"
         evaluation_path = output_dir / "candidate_evaluation.md"
-        dump_json(json_path, to_plain_data(batch))
         md_path.write_text(self.image_production_planner.render_markdown(batch), encoding="utf-8")
         evaluation_path.write_text(self.image_production_planner.render_evaluation_sheet(batch), encoding="utf-8")
-        return [str(json_path), str(md_path), str(evaluation_path)]
+        artifacts.extend([str(md_path), str(evaluation_path)])
+        return artifacts
 
     def _write_candidate_style_drift_report(
         self,
@@ -2291,9 +2734,13 @@ class DesignCopilotApp:
         md_path.write_text(self.candidate_comparison_builder.render_markdown(matrix), encoding="utf-8")
         return [str(json_path), str(md_path)]
 
-    def _write_delivery_manifest(self, output_dir: Path, creative_pack: CreativePack) -> None:
+    def _write_delivery_manifest(self, output_dir: Path, creative_pack: CreativePack, write_markdown: bool = True) -> list[str]:
         manifest = creative_pack.delivery_manifest
-        dump_json(output_dir / "delivery_manifest.json", to_plain_data(manifest))
+        json_path = output_dir / "delivery_manifest.json"
+        dump_json(json_path, to_plain_data(manifest))
+        artifacts = [str(json_path)]
+        if not write_markdown:
+            return artifacts
         items = "\n".join(
             f"- {item.name} | {item.size} | {item.format_hint} | {item.notes}"
             for item in manifest.export_items
@@ -2314,7 +2761,10 @@ class DesignCopilotApp:
                 f"## 确认要求\n- 正式导出前需要人工确认：{'是' if manifest.requires_confirmation else '否'}",
             ]
         )
-        (output_dir / "delivery_manifest.md").write_text(markdown, encoding="utf-8")
+        md_path = output_dir / "delivery_manifest.md"
+        md_path.write_text(markdown, encoding="utf-8")
+        artifacts.append(str(md_path))
+        return artifacts
 
     def _load_creative_pack_from_output_dir(self, output_dir: Path) -> CreativePack:
         creative_pack_path = output_dir / "creative_pack.json"

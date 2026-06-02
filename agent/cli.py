@@ -34,6 +34,42 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8787)
 
+    process_feishu = subparsers.add_parser(
+        "process-feishu-requirement",
+        help="Designer-first flow: read a Meegle work item and create a slim design workpack.",
+    )
+    process_feishu.add_argument("--project-key", required=True)
+    process_feishu.add_argument("--work-item-id", required=True)
+    process_feishu.add_argument("--asset-root")
+    process_feishu.add_argument("--output-mode", choices=("designer", "debug"), default="designer")
+
+    process_local = subparsers.add_parser(
+        "process-local-requirement",
+        help="Designer-first flow: read a local requirement and create a slim design workpack.",
+    )
+    process_local.add_argument("--project-key", required=True)
+    process_local.add_argument("--work-item-id", required=True)
+    process_local.add_argument("--title", required=True)
+    process_local.add_argument("--requirement-file", required=True)
+    process_local.add_argument("--category")
+    process_local.add_argument("--doc-file", action="append", dest="doc_files")
+    process_local.add_argument("--asset-root")
+    process_local.add_argument("--output-mode", choices=("designer", "debug"), default="designer")
+
+    image_direction = subparsers.add_parser(
+        "prepare-image-direction",
+        help="Create or refresh the designer-facing Chinese prompt sheet for first full-image generation.",
+    )
+    image_direction.add_argument("--project-key", required=True)
+    image_direction.add_argument("--work-item-id")
+
+    delivery_review = subparsers.add_parser(
+        "prepare-delivery-review",
+        help="Create a slim designer-facing delivery checklist without a long debug report.",
+    )
+    delivery_review.add_argument("--project-key", required=True)
+    delivery_review.add_argument("--work-item-id")
+
     fetch_todos = subparsers.add_parser("fetch-todos", help="Fetch Meegle todos.")
     fetch_todos.add_argument("--action", default="todo")
     fetch_todos.add_argument("--asset-key")
@@ -96,6 +132,7 @@ def build_parser() -> argparse.ArgumentParser:
     build_pack = subparsers.add_parser("build-creative-pack", help="Build the main creative pack artifacts.")
     build_pack.add_argument("--project-key", required=True)
     build_pack.add_argument("--work-item-id", required=True)
+    build_pack.add_argument("--output-mode", choices=("designer", "debug"), default="designer")
 
     clarification = subparsers.add_parser(
         "create-requirement-clarification-report",
@@ -305,6 +342,7 @@ def build_parser() -> argparse.ArgumentParser:
     build_local_pack.add_argument("--requirement-file", required=True)
     build_local_pack.add_argument("--category")
     build_local_pack.add_argument("--doc-file", action="append", dest="doc_files")
+    build_local_pack.add_argument("--output-mode", choices=("designer", "debug"), default="designer")
 
     prepare_delivery = subparsers.add_parser(
         "prepare-delivery-package",
@@ -443,8 +481,30 @@ def main() -> None:
         )
     elif args.command == "scan-assets":
         output = app.scan_assets(project_key=args.project_key, asset_root=args.asset_root)
+    elif args.command == "process-feishu-requirement":
+        output = app.process_feishu_requirement(
+            project_key=args.project_key,
+            work_item_id=args.work_item_id,
+            asset_root=args.asset_root,
+            output_mode=args.output_mode,
+        )
+    elif args.command == "process-local-requirement":
+        output = app.process_local_requirement(
+            project_key=args.project_key,
+            work_item_id=args.work_item_id,
+            title=args.title,
+            requirement_file=args.requirement_file,
+            same_category=args.category,
+            doc_files=args.doc_files,
+            asset_root=args.asset_root,
+            output_mode=args.output_mode,
+        )
+    elif args.command == "prepare-image-direction":
+        output = app.prepare_image_direction(project_key=args.project_key, work_item_id=args.work_item_id)
+    elif args.command == "prepare-delivery-review":
+        output = app.prepare_delivery_review(project_key=args.project_key, work_item_id=args.work_item_id)
     elif args.command == "build-creative-pack":
-        output = app.build_creative_pack(project_key=args.project_key, work_item_id=args.work_item_id)
+        output = app.build_creative_pack(project_key=args.project_key, work_item_id=args.work_item_id, output_mode=args.output_mode)
     elif args.command == "create-requirement-clarification-report":
         output = app.create_requirement_clarification_report(
             project_key=args.project_key,
@@ -600,6 +660,7 @@ def main() -> None:
             requirement_file=args.requirement_file,
             same_category=args.category,
             doc_files=args.doc_files,
+            output_mode=args.output_mode,
         )
     elif args.command == "prepare-delivery-package":
         output = app.prepare_delivery_package(

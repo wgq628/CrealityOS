@@ -287,15 +287,17 @@ class CliEntrypointTests(unittest.TestCase):
 
         run_dir = Path(result["output_dir"])
         memory_payload = json.loads((run_dir / "requirement_memory_report.json").read_text(encoding="utf-8"))
-        creative_pack = (run_dir / "creative_pack.md").read_text(encoding="utf-8")
+        creative_payload = json.loads((run_dir / "creative_pack.json").read_text(encoding="utf-8"))
+        psd_guidance = "\n".join(creative_payload["psd_guidance"])
         skill = self.app.generate_project_skill(project_key="STORY")
         skill_content = Path(skill["skill_file"]).read_text(encoding="utf-8")
 
         self.assertNotIn("PSD", memory_payload["learned_deliverables"])
         self.assertIn("横竖构图适配", memory_payload["learned_visual_keywords"])
-        self.assertIn("横竖适配 / 剧情向交付建议", creative_pack)
-        self.assertNotIn("## PSD / 图层建议", creative_pack)
-        self.assertNotIn("交付物涉及：PSD", creative_pack)
+        self.assertIn("不默认", psd_guidance)
+        self.assertNotIn("交付物涉及：PSD", psd_guidance)
+        self.assertNotIn("PSD / 图层建议", psd_guidance)
+        self.assertFalse((run_dir / "creative_pack.md").exists())
         self.assertIn("不默认套用 PSD 分层或切图规则", skill_content)
 
     @staticmethod

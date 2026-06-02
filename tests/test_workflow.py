@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 
 from agent.app import DesignCopilotApp
-from agent.models import SessionSnapshot, WorkItemContext
+from agent.models import DesignBrief, SessionSnapshot, WorkItemContext
 
 
 class WorkflowTests(unittest.TestCase):
@@ -20,6 +20,29 @@ class WorkflowTests(unittest.TestCase):
     def tearDown(self) -> None:
         if self.root.exists():
             shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_memory_project_key_prefers_readable_game_name(self) -> None:
+        brief = DesignBrief(
+            project_key="artdesign",
+            work_item_id="7005309647",
+            title="货柜花篮掉落",
+            objective="制作插花三消平面投放素材",
+            target_audience="待确认",
+            platform="待确认",
+            sizes=["9:16"],
+            deliverables=["PSD"],
+            deadline="2026-06-03",
+            summary="货柜花篮掉落",
+            same_category="general-game-design",
+            source_links=[],
+            missing_information=[],
+            risk_points=[],
+            raw_signals=[],
+            game_name="插花三消C",
+            game_project_id="6178760014",
+        )
+
+        self.assertEqual(self.app._memory_project_key_from_brief(brief, "artdesign"), "插花三消C")
 
     def test_feedback_ingest_generates_review_report(self) -> None:
         result = self.app.ingest_feedback(
@@ -392,23 +415,24 @@ class WorkflowTests(unittest.TestCase):
         )
         self.assertTrue(Path(pack_result["output_dir"]).exists())
         output_dir = Path(pack_result["output_dir"])
+        task_sheet = Path(pack_result["task_sheet"])
+        prompt_sheet = Path(pack_result["prompt_sheet"])
+        self.assertTrue(task_sheet.exists())
+        self.assertTrue(prompt_sheet.exists())
+        task_content = task_sheet.read_text(encoding="utf-8")
+        self.assertIn("制作任务单", task_content)
+        self.assertIn("先生成完整 9:16 效果图", task_content)
+        self.assertIn("同游戏历史优秀图", task_content)
+        prompt_content = prompt_sheet.read_text(encoding="utf-8")
+        self.assertIn("中文提示词", prompt_content)
+        self.assertIn("第一轮先做整体效果图", prompt_content)
         self.assertTrue((output_dir / "creative_pack.json").exists())
         self.assertTrue((output_dir / "style_transfer_report.json").exists())
-        self.assertTrue((output_dir / "style_transfer_report.md").exists())
-        transfer_md = (output_dir / "style_transfer_report.md").read_text(encoding="utf-8")
-        self.assertIn("风格迁移与项目覆盖报告", transfer_md)
-        self.assertIn("K3 待验证假设", transfer_md)
+        self.assertFalse((output_dir / "style_transfer_report.md").exists())
         self.assertTrue((output_dir / "style_alignment_report.json").exists())
-        self.assertTrue((output_dir / "style_alignment_report.md").exists())
-        alignment_md = (output_dir / "style_alignment_report.md").read_text(encoding="utf-8")
-        self.assertIn("风格一致性报告", alignment_md)
-        self.assertIn("K3 不进入正式提示词", alignment_md)
+        self.assertFalse((output_dir / "style_alignment_report.md").exists())
         self.assertTrue((output_dir / "design_decision_record.json").exists())
-        self.assertTrue((output_dir / "design_decision_record.md").exists())
-        decision_md = (output_dir / "design_decision_record.md").read_text(encoding="utf-8")
-        self.assertIn("设计决策记录", decision_md)
-        self.assertIn("需求范围", decision_md)
-        self.assertIn("K3", decision_md)
+        self.assertFalse((output_dir / "design_decision_record.md").exists())
         regenerated_alignment = self.app.create_style_alignment_report(
             project_key="LOCAL",
             work_item_id="5001",
@@ -421,17 +445,21 @@ class WorkflowTests(unittest.TestCase):
         )
         self.assertTrue(Path(regenerated_transfer["style_transfer_report_md"]).exists())
         self.assertIn(regenerated_transfer["status"], {"transfer_ready", "needs_designer_review", "blocked"})
+        transfer_md = Path(regenerated_transfer["style_transfer_report_md"]).read_text(encoding="utf-8")
+        self.assertIn("风格迁移与项目覆盖报告", transfer_md)
+        self.assertIn("K3 待验证假设", transfer_md)
         regenerated_decisions = self.app.create_design_decision_record(
             project_key="LOCAL",
             work_item_id="5001",
         )
         self.assertTrue(Path(regenerated_decisions["design_decision_record_md"]).exists())
         self.assertGreaterEqual(regenerated_decisions["decision_count"], 3)
+        decision_md = Path(regenerated_decisions["design_decision_record_md"]).read_text(encoding="utf-8")
+        self.assertIn("设计决策记录", decision_md)
+        self.assertIn("需求范围", decision_md)
+        self.assertIn("K3", decision_md)
         self.assertTrue((output_dir / "requirement_clarification_report.json").exists())
-        self.assertTrue((output_dir / "requirement_clarification_report.md").exists())
-        clarification_md = (output_dir / "requirement_clarification_report.md").read_text(encoding="utf-8")
-        self.assertIn("需求澄清清单", clarification_md)
-        self.assertIn("截止时间", clarification_md)
+        self.assertFalse((output_dir / "requirement_clarification_report.md").exists())
         regenerated_clarification = self.app.create_requirement_clarification_report(
             project_key="LOCAL",
             work_item_id="5001",
@@ -448,7 +476,7 @@ class WorkflowTests(unittest.TestCase):
         )
         self.assertEqual(regenerated_from_dir["question_count"], regenerated_clarification["question_count"])
         self.assertTrue((output_dir / "image_generation_batch.json").exists())
-        self.assertTrue((output_dir / "candidate_evaluation.md").exists())
+        self.assertFalse((output_dir / "candidate_evaluation.md").exists())
         image_batch = self.app.create_image_production_batch(project_key="LOCAL", work_item_id="5001")
         self.assertTrue(Path(image_batch["image_generation_batch"]).exists())
         self.assertEqual(len(image_batch["artifacts"]), 3)
@@ -703,6 +731,50 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("design_workflow_plan", cycle_result["artifacts"])
         self.assertIn("designer_review_packet", cycle_result["artifacts"])
 
+    def test_product_requirement_flow_keeps_default_outputs_slim(self) -> None:
+        requirement_file = self.root / "product-flow.md"
+        requirement_file.write_text(
+            "平面+视频需求：先做 9:16 1080x1920 整体效果图，确认后再进入 PSD、PNG 切图和多尺寸拓展。",
+            encoding="utf-8",
+        )
+
+        result = self.app.process_local_requirement(
+            project_key="PRODUCT",
+            work_item_id="8601",
+            title="产品化主流程",
+            requirement_file=str(requirement_file),
+            same_category="casual-match",
+        )
+
+        output_dir = Path(result["output_dir"])
+        workpack_dir = Path(result["designer_workpack"])
+        state_path = workpack_dir / "_system" / "state.json"
+        self.assertEqual(result["output_mode"], "designer")
+        self.assertTrue(workpack_dir.exists())
+        self.assertTrue(Path(result["task_sheet"]).exists())
+        self.assertTrue(Path(result["prompt_sheet"]).exists())
+        self.assertTrue(state_path.exists())
+        self.assertTrue((output_dir / "design_brief.json").exists())
+        self.assertTrue((output_dir / "creative_pack.json").exists())
+        self.assertTrue((output_dir / "style_transfer_report.json").exists())
+        self.assertFalse((output_dir / "design_brief.md").exists())
+        self.assertFalse((output_dir / "creative_pack.md").exists())
+        self.assertFalse((output_dir / "style_transfer_report.md").exists())
+        self.assertFalse((output_dir / "candidate_evaluation.md").exists())
+
+        direction = self.app.prepare_image_direction(project_key="PRODUCT", work_item_id="8601")
+        self.assertTrue(Path(direction["prompt_sheet"]).exists())
+        self.assertEqual(Path(direction["prompt_sheet"]), Path(result["prompt_sheet"]))
+
+        delivery = self.app.prepare_delivery_review(project_key="PRODUCT", work_item_id="8601")
+        review_sheet = Path(delivery["delivery_review_sheet"])
+        self.assertTrue(review_sheet.exists())
+        self.assertEqual(review_sheet.parent, workpack_dir)
+        self.assertTrue((output_dir / "delivery_readiness" / "delivery_readiness_report.json").exists())
+        self.assertFalse((output_dir / "delivery_readiness" / "delivery_readiness_report.md").exists())
+        state_payload = json.loads(state_path.read_text(encoding="utf-8"))
+        self.assertEqual(Path(state_payload["visible_files"]["delivery_review_sheet"]), review_sheet)
+
     def test_field_calibration_guides_local_brief(self) -> None:
         sample_file = self.root / "workitem.json"
         sample_file.write_text(
@@ -728,11 +800,13 @@ class WorkflowTests(unittest.TestCase):
             requirement_file=str(sample_file),
             same_category="anime-rpg",
         )
-        brief_md = Path(pack_result["output_dir"]) / "design_brief.md"
-        content = brief_md.read_text(encoding="utf-8")
+        output_dir = Path(pack_result["output_dir"])
+        brief_payload = json.loads((output_dir / "design_brief.json").read_text(encoding="utf-8"))
+        content = json.dumps(brief_payload, ensure_ascii=False)
         self.assertIn("TikTok", content)
         self.assertIn("1080x1920", content)
         self.assertIn("PSD", content)
+        self.assertFalse((output_dir / "design_brief.md").exists())
 
     def test_diagnose_workitem_intake_from_local_sample(self) -> None:
         sample_file = self.root / "intake_workitem.json"
@@ -814,9 +888,11 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("designer_review_packet", result["artifacts"])
         memory_report = Path(result["artifacts"]["requirement_memory_report"])
         self.assertTrue(memory_report.exists())
-        memory_md = memory_report.with_suffix(".md").read_text(encoding="utf-8")
-        self.assertIn("需求自学记忆", memory_md)
-        self.assertIn("投放素材", memory_md)
+        memory_payload = json.loads(memory_report.read_text(encoding="utf-8"))
+        memory_content = json.dumps(memory_payload, ensure_ascii=False)
+        self.assertIn("learned_deliverables", memory_payload)
+        self.assertIn("投放素材", memory_content)
+        self.assertFalse(memory_report.with_suffix(".md").exists())
         profile = self.app.store.load_project_profile("FEISHU")
         self.assertIsNotNone(profile)
         self.assertIn("1080x1920", profile.default_sizes)

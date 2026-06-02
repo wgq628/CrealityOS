@@ -9,6 +9,9 @@ from agent.utils import load_json, slugify
 
 
 IMPORTANT_ARTIFACT_FILES = (
+    "制作任务单.md",
+    "中文提示词.md",
+    "交付检查.md",
     "design_brief.json",
     "requirement_clarification_report.json",
     "requirement_change_report.json",
