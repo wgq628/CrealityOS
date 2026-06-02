@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "design-copilot"
+version = "0.1.0"
+description = "Local designer copilot for Feishu project intake, style learning, and delivery planning."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "OpenAI Codex" }
+]
+dependencies = []
+
+[project.optional-dependencies]
+psd = [
+  "pytoshop>=1.2",
+]
+test = [
+  "pytest>=8",
+]
+
+[project.scripts]
+design-copilot = "agent.cli:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["agent*"]
