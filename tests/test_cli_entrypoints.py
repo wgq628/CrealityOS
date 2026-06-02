@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 
 from agent.app import DesignCopilotApp
-from agent.console_server import _state_from_request, render_console_html
+from agent.console_server import _available_actions, _resolve_intake_link, _run_action_from_payload, _state_from_request, render_console_html
 from agent.settings import AppPaths
 
 
@@ -130,9 +130,12 @@ class CliEntrypointTests(unittest.TestCase):
         self.assertEqual(payload["console"]["project_key"], "CONSOLE")
         self.assertEqual(payload["console"]["work_item_id"], "8101")
         self.assertTrue(payload["artifact_index"]["creative_pack"])
-        self.assertIn("CrealityOS Console", html)
+        self.assertIn("CrealityOS Workbench", html)
         self.assertIn("console-data", html)
         self.assertIn("/api/state", html)
+        self.assertIn("/api/action/run", html)
+        self.assertIn("output_matrix", payload["workbench"])
+        self.assertTrue(payload["workbench"]["actions"]["autopilot_sequence"])
 
     def test_console_corrects_project_work_item_mismatch(self) -> None:
         real_requirement = self.root / "real.md"
@@ -168,6 +171,75 @@ class CliEntrypointTests(unittest.TestCase):
         self.assertTrue(payload["console"]["corrected"])
         self.assertTrue(payload["console"]["notices"])
         self.assertIn("REAL", payload["console"]["output_dir"])
+
+    def test_workbench_action_gate_rejects_unknown_locked_and_unconfirmed_actions(self) -> None:
+        paths = AppPaths.from_root(self.root)
+
+        unknown = _run_action_from_payload({"action_id": "shell_rm_rf", "project_key": "LOCAL"}, self.app, paths)
+        locked = _run_action_from_payload({"action_id": "publish_meegle_writeback", "project_key": "LOCAL"}, self.app, paths)
+        unconfirmed = _run_action_from_payload(
+            {"action_id": "create_meegle_writeback_draft", "project_key": "LOCAL", "work_item_id": "5001"},
+            self.app,
+            paths,
+        )
+
+        self.assertFalse(unknown["ok"])
+        self.assertIn("create_design_workflow_plan", unknown["allowed_actions"])
+        self.assertFalse(locked["ok"])
+        self.assertEqual(locked["tier"], "locked")
+        self.assertFalse(unconfirmed["ok"])
+        self.assertTrue(unconfirmed["requires_confirmation"])
+
+    def test_workbench_safe_action_runs_from_whitelist(self) -> None:
+        requirement_file = self.root / "requirement.md"
+        requirement_file.write_text("Need a 9:16 PNG gameplay ad with clear hierarchy.", encoding="utf-8")
+        self.app.build_local_creative_pack(
+            project_key="ACTION",
+            work_item_id="8201",
+            title="Action Launch Ad",
+            requirement_file=str(requirement_file),
+            same_category="casual-card",
+        )
+
+        result = _run_action_from_payload(
+            {"action_id": "create_design_workflow_plan", "project_key": "ACTION", "work_item_id": "8201"},
+            self.app,
+            AppPaths.from_root(self.root),
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["action_id"], "create_design_workflow_plan")
+        self.assertTrue(Path(result["result"]["design_workflow_plan"]).exists())
+
+    def test_workbench_intake_link_resolves_local_work_item(self) -> None:
+        requirement_file = self.root / "requirement.md"
+        requirement_file.write_text("Need a launch ad.", encoding="utf-8")
+        self.app.build_local_creative_pack(
+            project_key="LINK",
+            work_item_id="8301",
+            title="Link Launch Ad",
+            requirement_file=str(requirement_file),
+            same_category="casual-card",
+        )
+
+        result = _resolve_intake_link(
+            {"url": "https://project.feishu.cn/example/work_item/8301"},
+            AppPaths.from_root(self.root),
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["work_item_id"], "8301")
+        self.assertEqual(result["matched_local_project"], "LINK")
+
+    def test_workbench_action_catalog_separates_autopilot_and_locked_actions(self) -> None:
+        catalog = _available_actions()
+        action_ids = {item["action_id"] for item in catalog["actions"]}
+        locked_ids = {item["action_id"] for item in catalog["actions"] if item["tier"] == "locked"}
+        autopilot_ids = {item["action_id"] for item in catalog["autopilot_sequence"]}
+
+        self.assertIn("create_image_production_batch", autopilot_ids)
+        self.assertIn("execute_pixpark_generation", locked_ids)
+        self.assertIn("create_psd_slice_spec_report", action_ids)
 
     def test_generate_project_skill_from_learned_memory(self) -> None:
         requirement_file = self.root / "requirement.md"

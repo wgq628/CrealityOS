@@ -16,6 +16,8 @@ workspace/test-sandboxes/*
 workspace/*.log
 memory/projects/*
 !memory/projects/.gitkeep
+memory/project_bindings/*
+!memory/project_bindings/.gitkeep
 memory/reviews/*
 !memory/reviews/.gitkeep
 memory/sessions/*
