@@ -271,14 +271,29 @@ def collect_artifacts(output_dir: Path | None, extra_artifacts: list[str] | None
     artifact_index: dict[str, str | None] = {Path(name).stem: None for name in IMPORTANT_ARTIFACT_FILES}
     candidates: list[Path] = []
     if output_dir and output_dir.exists():
-        candidates.extend(path for path in output_dir.rglob("*") if path.name in IMPORTANT_ARTIFACT_FILES)
+        candidates.extend(path for path in output_dir.rglob("*") if artifact_key(path))
     for raw in extra_artifacts or []:
         path = Path(raw)
-        if path.exists() and path.name in IMPORTANT_ARTIFACT_FILES:
+        if path.exists() and artifact_key(path):
             candidates.append(path)
     for path in sorted(candidates, key=modified_time):
-        artifact_index[path.stem] = str(path)
+        key = artifact_key(path)
+        if not key:
+            continue
+        current = artifact_index.get(key)
+        if not current or (Path(current).suffix.lower() != ".json" and path.suffix.lower() == ".json"):
+            artifact_index[key] = str(path)
     return artifact_index
+
+
+def artifact_key(path: Path) -> str | None:
+    important_stems = {Path(name).stem for name in IMPORTANT_ARTIFACT_FILES}
+    if path.stem in important_stems:
+        return path.stem
+    for stem in important_stems:
+        if path.stem.endswith(f"-{stem}"):
+            return stem
+    return None
 
 
 def parse_run_name(name: str) -> tuple[str, str | None]:

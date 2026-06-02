@@ -936,6 +936,13 @@ class DesignCopilotApp:
         report_md = report_path.with_suffix(".md")
         report_md.write_text(self.candidate_review_ingestor.render_markdown(report), encoding="utf-8")
         learning_result = self.create_learning_digest(project_key)
+        review_artifacts = [str(report_path), str(report_md), *generated_review_reports]
+        learning_digest = learning_result.get("learning_digest")
+        if learning_digest:
+            review_artifacts.append(str(learning_digest))
+        if snapshot:
+            snapshot.last_artifacts.extend(path for path in review_artifacts if path not in snapshot.last_artifacts)
+            self.store.save_session_snapshot(snapshot)
         drift_artifacts: list[str] = []
         comparison_artifacts: list[str] = []
         if snapshot:

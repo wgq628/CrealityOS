@@ -120,15 +120,43 @@ class MeegleWritebackDraftBuilder:
 
     def _collect_artifacts(self, snapshot: SessionSnapshot | None, output_dir: Path | None) -> dict[str, str]:
         artifacts: dict[str, str] = {}
+        important_names = self._important_names()
+
+        def remember(path: Path) -> None:
+            key = self._artifact_key(path)
+            if not key:
+                return
+            current = artifacts.get(key)
+            if not current or (Path(current).suffix.lower() != ".md" and path.suffix.lower() == ".md"):
+                artifacts[key] = str(path)
+
         for raw_path in snapshot.last_artifacts if snapshot else []:
             path = Path(raw_path)
-            if path.name in self.IMPORTANT_ARTIFACTS or path.suffix.lower() == ".md":
-                artifacts[path.stem] = str(path)
+            if path.name in important_names or path.suffix.lower() == ".md" or self._artifact_key(path):
+                remember(path)
         if output_dir and output_dir.exists():
-            for path in output_dir.rglob("*.md"):
-                if path.name in self.IMPORTANT_ARTIFACTS:
-                    artifacts.setdefault(path.stem, str(path))
+            for path in output_dir.rglob("*"):
+                if self._artifact_key(path) and path.suffix.lower() in {".md", ".json"}:
+                    remember(path)
         return dict(sorted(artifacts.items()))
+
+    @classmethod
+    def _important_names(cls) -> set[str]:
+        names = set(cls.IMPORTANT_ARTIFACTS)
+        names.update(Path(name).with_suffix(".json").name for name in cls.IMPORTANT_ARTIFACTS)
+        return names
+
+    @classmethod
+    def _artifact_key(cls, path: Path) -> str | None:
+        important_stems = {Path(name).stem for name in cls.IMPORTANT_ARTIFACTS}
+        if path.stem in important_stems:
+            return path.stem
+        for stem in important_stems:
+            if path.stem.endswith(f"-{stem}"):
+                return stem
+        if path.suffix.lower() == ".md":
+            return path.stem
+        return None
 
     def _comment_markdown(
         self,

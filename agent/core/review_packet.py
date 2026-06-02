@@ -91,17 +91,34 @@ class DesignerReviewPacketBuilder:
         artifacts: dict[str, str | None] = {Path(name).stem: None for name in self.IMPORTANT_FILES}
         candidates: list[Path] = []
         if output_dir and output_dir.exists():
-            candidates.extend(path for path in output_dir.rglob("*.md") if path.name in self.IMPORTANT_FILES)
+            candidates.extend(
+                path
+                for path in output_dir.rglob("*")
+                if self._artifact_key(path) and path.suffix.lower() in {".md", ".json"}
+            )
         if snapshot:
             for raw in snapshot.last_artifacts:
                 path = Path(raw)
-                if path.suffix.lower() == ".md" and path.exists():
+                if path.suffix.lower() in {".md", ".json"} and self._artifact_key(path) and path.exists():
                     candidates.append(path)
             # Learning/audit reports live in memory, so snapshot paths are the most reliable source.
         for path in candidates:
-            if path.name in self.IMPORTANT_FILES:
-                artifacts[Path(path.name).stem] = str(path)
+            key = self._artifact_key(path)
+            if key:
+                current = artifacts.get(key)
+                if not current or (Path(current).suffix.lower() != ".md" and path.suffix.lower() == ".md"):
+                    artifacts[key] = str(path)
         return artifacts
+
+    @classmethod
+    def _artifact_key(cls, path: Path) -> str | None:
+        important_stems = {Path(name).stem for name in cls.IMPORTANT_FILES}
+        if path.stem in important_stems:
+            return path.stem
+        for stem in important_stems:
+            if path.stem.endswith(f"-{stem}"):
+                return stem
+        return None
 
     @staticmethod
     def _status(artifact_index: dict[str, str | None], readiness_payload: dict[str, Any] | None) -> str:

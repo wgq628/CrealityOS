@@ -55,7 +55,7 @@ class DesignWorkflowPlanner:
             output_dir=str(output_dir) if output_dir else None,
             steps=steps,
             blockers=list(dict.fromkeys(blockers)),
-            next_commands=next_commands or ["先生成或恢复创作包，再刷新设计工作流计划。"],
+            next_commands=next_commands or self._fallback_next_commands(steps, artifact_index),
             safety_notes=[
                 "工作流计划只读本地产物并写入本地计划文件，不自动发布 Meegle。",
                 "所有出图、PSD 导出、正式交付、覆盖文件和工作流流转仍需设计师显式确认。",
@@ -202,3 +202,14 @@ class DesignWorkflowPlanner:
         if any(step.status == "needs_designer_confirmation" for step in steps):
             return "needs_designer_confirmation"
         return "ready_for_meegle_writeback_or_delivery"
+
+    @staticmethod
+    def _fallback_next_commands(steps: list[DesignWorkflowStep], artifact_index: dict[str, str | None]) -> list[str]:
+        if any(step.status == "needs_designer_confirmation" for step in steps):
+            return [
+                "当前已到人工确认门控：复核 designer_review_packet、delivery_readiness_report 和 meegle_writeback_approval_ticket。",
+                "如确认发布 Meegle 评论或流转工作项，再单独执行 publish-* 命令。",
+            ]
+        if artifact_index.get("creative_pack"):
+            return ["当前没有自动下一步命令；请按交付确认清单选择 PSD 精修、正式 staging 或 Meegle 回写发布。"]
+        return ["先生成或恢复创作包，再刷新设计工作流计划。"]

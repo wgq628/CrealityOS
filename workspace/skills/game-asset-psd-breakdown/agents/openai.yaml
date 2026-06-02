@@ -1,0 +1,3 @@
+display_name: Game PSD Breakdown
+short_description: Rebuild polished game images into clean, reusable, verified PSD layers.
+default_prompt: Rebuild this game image into a production PSD: lock the requested canvas size, classify every element as direct extraction, clean regeneration, or hybrid repair, generate clean reusable asset layers, place repeated elements by the original layout coordinates, create the manifest and Photoshop JSX, run Photoshop when available, and verify the final PSD size, layers, and recomposition fidelity.
