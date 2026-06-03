@@ -90,14 +90,24 @@ class DesignWorkflowPlanner:
                 lines.append(f"### {step.step_id} {step.title}")
                 lines.extend(f"- {item}" for item in step.evidence)
         lines.extend(["", "## 阻塞项", *(f"- {item}" for item in plan.blockers or ["无"])])
+        existing_artifacts = {key: value for key, value in plan.artifact_index.items() if value}
         lines.extend(["", "## 产物索引"])
-        lines.extend(f"- {key}: `{value or '缺失'}`" for key, value in plan.artifact_index.items())
+        lines.extend(
+            (f"- {key}: `{value}`" for key, value in existing_artifacts.items())
+            if existing_artifacts
+            else ["- 暂无已生成产物。"]
+        )
         lines.extend(["", "## 安全说明", *(f"- {item}" for item in plan.safety_notes)])
         return "\n".join(lines)
 
     @classmethod
-    def collect_artifacts(cls, output_dir: Path | None, extra_artifacts: list[str] | None = None) -> dict[str, str | None]:
-        return collect_artifacts(output_dir, extra_artifacts)
+    def collect_artifacts(
+        cls,
+        output_dir: Path | None,
+        extra_artifacts: list[str] | None = None,
+        include_missing: bool = False,
+    ) -> dict[str, str | None]:
+        return collect_artifacts(output_dir, extra_artifacts, include_missing=include_missing)
 
     def _step(
         self,

@@ -155,8 +155,13 @@ class ArtifactResolver:
             warnings=[f"No local project context found for {selected_project}."],
         )
 
-    def collect_artifacts(self, output_dir: Path | None, extra_artifacts: list[str] | None = None) -> dict[str, str | None]:
-        return collect_artifacts(output_dir, extra_artifacts)
+    def collect_artifacts(
+        self,
+        output_dir: Path | None,
+        extra_artifacts: list[str] | None = None,
+        include_missing: bool = True,
+    ) -> dict[str, str | None]:
+        return collect_artifacts(output_dir, extra_artifacts, include_missing=include_missing)
 
     def find_work_item(self, work_item_id: str) -> tuple[str, Path] | None:
         matches: list[tuple[str, Path]] = []
@@ -267,8 +272,14 @@ def find_run_dir(paths: AppPaths, project_key: str, work_item_id: str) -> Path |
     return None
 
 
-def collect_artifacts(output_dir: Path | None, extra_artifacts: list[str] | None = None) -> dict[str, str | None]:
-    artifact_index: dict[str, str | None] = {Path(name).stem: None for name in IMPORTANT_ARTIFACT_FILES}
+def collect_artifacts(
+    output_dir: Path | None,
+    extra_artifacts: list[str] | None = None,
+    include_missing: bool = True,
+) -> dict[str, str | None]:
+    artifact_index: dict[str, str | None] = (
+        {Path(name).stem: None for name in IMPORTANT_ARTIFACT_FILES} if include_missing else {}
+    )
     candidates: list[Path] = []
     if output_dir and output_dir.exists():
         candidates.extend(path for path in output_dir.rglob("*") if path.name in IMPORTANT_ARTIFACT_FILES)

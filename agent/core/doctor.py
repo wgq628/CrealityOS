@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 from pathlib import Path
 import shutil
 import sys
@@ -111,10 +112,11 @@ class Doctor:
         if not snapshot:
             return []
         output_dir = Path(snapshot.output_dir)
+        source_mode = Doctor._detect_cycle_source_mode(output_dir)
+        lean_mode = bool(source_mode and source_mode.endswith("-lean"))
         required = (
             ("BRIEF", "设计需求卡", "design_brief.json"),
             ("CREATIVE", "创作包", "creative_pack.json"),
-            ("WORKFLOW", "工作流计划", "workflow/design_workflow_plan.json"),
         )
         checks: list[DoctorCheck] = []
         for check_id, title, relative in required:
@@ -123,7 +125,37 @@ class Doctor:
                 checks.append(DoctorCheck(check_id, title, "pass", f"已存在：{path}"))
             else:
                 checks.append(DoctorCheck(check_id, title, "warning", f"缺少常见产物：{path}"))
+        workflow_path = output_dir / "workflow" / "design_workflow_plan.json"
+        if workflow_path.exists():
+            checks.append(DoctorCheck("WORKFLOW", "工作流计划", "pass", f"已存在：{workflow_path}"))
+        elif lean_mode:
+            checks.append(
+                DoctorCheck(
+                    "WORKFLOW",
+                    "工作流计划",
+                    "pass",
+                    f"轻量模式 `{source_mode}` 下工作流计划为可选项：{workflow_path}",
+                )
+            )
+        else:
+            mode_hint = f"（来源模式：{source_mode}）" if source_mode else ""
+            checks.append(DoctorCheck("WORKFLOW", "工作流计划", "warning", f"缺少常见产物{mode_hint}：{workflow_path}"))
         return checks
+
+    @staticmethod
+    def _detect_cycle_source_mode(output_dir: Path) -> str | None:
+        cycle_report = output_dir / "cycle" / "design_cycle_report.json"
+        if not cycle_report.exists():
+            return None
+        try:
+            payload = json.loads(cycle_report.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        value = payload.get("source_mode")
+        if not isinstance(value, str):
+            return None
+        value = value.strip()
+        return value or None
 
     @staticmethod
     def _recommended_commands(project_key: str | None, snapshot: SessionSnapshot | None) -> list[str]:

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "design-copilot"
-version = "0.2.0"
+version = "0.2.1"
 description = "Local designer copilot for Feishu project intake, style learning, and delivery planning."
 readme = "README.md"
 requires-python = ">=3.11"

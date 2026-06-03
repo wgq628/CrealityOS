@@ -689,10 +689,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("style_transfer_report", packet_md)
         self.assertIn("style_alignment_report", packet_md)
         self.assertIn("requirement_clarification_report", packet_md)
-        self.assertIn("generated_gallery", packet_md)
-        self.assertIn("candidate_style_drift_report", packet_md)
-        self.assertIn("candidate_comparison_matrix", packet_md)
-        self.assertIn("psd_slice_spec_report", packet_md)
+        self.assertNotIn("`缺失`", packet_md)
         self.assertIn("delivery_readiness_report", packet_md)
         self.assertIn("design_workflow_plan", packet_md)
         self.assertIn("人工确认清单", packet_md)
@@ -718,6 +715,7 @@ class WorkflowTests(unittest.TestCase):
             same_category="anime-rpg",
             doc_files=[str(doc_file)],
             asset_root=str(asset_root),
+            full=True,
         )
         self.assertTrue(Path(cycle_result["cycle_report"]).exists())
         self.assertIn("metacognition_audit", cycle_result["artifacts"])
@@ -883,10 +881,20 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("style_transfer_report", result["artifacts"])
         self.assertIn("style_alignment_report", result["artifacts"])
         self.assertIn("design_decision_record", result["artifacts"])
-        self.assertIn("learning_digest", result["artifacts"])
-        self.assertIn("delivery_readiness_report", result["artifacts"])
-        self.assertIn("designer_review_packet", result["artifacts"])
-        memory_report = Path(result["artifacts"]["requirement_memory_report"])
+        self.assertNotIn("learning_digest", result["artifacts"])
+        self.assertNotIn("delivery_readiness_report", result["artifacts"])
+        self.assertNotIn("designer_review_packet", result["artifacts"])
+        self.assertIn("默认轻量流程", "\n".join(result["skipped_steps"]))
+
+        full_result = self.app.run_feishu_design_cycle(project_key="FEISHU", work_item_id="9001", full=True)
+        self.assertTrue(Path(full_result["cycle_report"]).exists())
+        self.assertIn("learning_digest", full_result["artifacts"])
+        self.assertIn("delivery_readiness_report", full_result["artifacts"])
+        self.assertIn("designer_review_packet", full_result["artifacts"])
+        output_dir = Path(full_result["artifacts"]["creative_pack_dir"])
+        for dirname in self.app.LEAN_FULL_ONLY_DIRS:
+            self.assertTrue((output_dir / dirname).exists())
+        memory_report = Path(full_result["artifacts"]["requirement_memory_report"])
         self.assertTrue(memory_report.exists())
         memory_payload = json.loads(memory_report.read_text(encoding="utf-8"))
         memory_content = json.dumps(memory_payload, ensure_ascii=False)
@@ -897,6 +905,14 @@ class WorkflowTests(unittest.TestCase):
         self.assertIsNotNone(profile)
         self.assertIn("1080x1920", profile.default_sizes)
         self.assertIn("投放素材", profile.gameplay_tags)
+
+        lean_again = self.app.run_feishu_design_cycle(project_key="FEISHU", work_item_id="9001")
+        self.assertNotIn("learning_digest", lean_again["artifacts"])
+        self.assertNotIn("delivery_readiness_report", lean_again["artifacts"])
+        self.assertNotIn("designer_review_packet", lean_again["artifacts"])
+        for dirname in self.app.LEAN_FULL_ONLY_DIRS:
+            self.assertFalse((output_dir / dirname).exists())
+        self.assertIn("已清理历史完整流程产物目录", "\n".join(lean_again["skipped_steps"]))
 
     def test_diagnose_workitem_intake_with_mocked_meegle_context(self) -> None:
         self.app.meegle.fetch_workitem_context = lambda project_key, work_item_id: WorkItemContext(

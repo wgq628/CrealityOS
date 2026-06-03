@@ -335,11 +335,16 @@ def _state_from_request(
         output_dir=str(selection.output_dir) if selection.output_dir else None,
     )
     payload = load_json(Path(dashboard_result["dashboard_data"]), {})
-    artifact_index = payload.get("artifact_index") or {}
+    artifact_index = {
+        key: value
+        for key, value in (payload.get("artifact_index") or {}).items()
+        if value
+    }
+    payload["artifact_index"] = artifact_index
     extra_payloads = {
         key: load_json(Path(value), None)
         for key, value in artifact_index.items()
-        if value and Path(value).suffix.lower() == ".json"
+        if Path(value).suffix.lower() == ".json"
     }
     work_items = discover_work_items(paths, selection.project_key)
     output_dir = str(selection.output_dir) if selection.output_dir else payload.get("cockpit", {}).get("output_dir")
@@ -900,7 +905,6 @@ def render_product_workbench_html(payload: dict) -> str:
       background: #ece4d7; border: 1px solid #ddd2c1; border-radius: 4px;
     }
     .artifactGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 9px; }
-    .artifactLine.missing { opacity: .52; }
     .dock {
       position: sticky; top: 76px; align-self: start; max-height: calc(100vh - 92px);
       display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto;
@@ -1191,7 +1195,7 @@ def render_product_workbench_html(payload: dict) -> str:
     const enabledActions = actions.filter(action => action.enabled && action.tier !== 'locked');
     const artifactIndex = data.artifact_index || {};
     const artifactEntries = Object.entries(artifactIndex);
-    const presentArtifacts = artifactEntries.filter(([, value]) => value).length;
+    const artifactCount = artifactEntries.length;
     const sourceLinks = arr(brief.source_links).map(item => String(item || '')).filter(Boolean);
     const firstSourceLink = sourceLinks.find(item => /^https?:\\/\\//i.test(item)) || '';
     const currentTaskTitle = brief.title || cockpit.title || c.work_item_id || '未选择需求';
@@ -1218,7 +1222,7 @@ def render_product_workbench_html(payload: dict) -> str:
       ['阻塞', (cockpit.blockers || readiness.blockers || []).length],
       ['待确认', (cockpit.confirmations || []).length],
       ['素材', inventory.total || 0],
-      ['产物', `${presentArtifacts}/${artifactEntries.length || 0}`],
+      ['产物', artifactCount],
     ].map(([label, value]) => `<div class="metric"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('');
 
     const contextMessages = [...(c.notices || []), ...(c.warnings || [])];
@@ -1239,7 +1243,7 @@ def render_product_workbench_html(payload: dict) -> str:
     document.getElementById('flowOutput').textContent = selectedOutputs.length ? `建议产出：${selectedOutputs.join('、')}` : '未选定最终产出。';
     document.getElementById('flowMatrix').textContent = `${outputRows.length} 类产出被纳入矩阵。`;
     document.getElementById('flowActions').textContent = `安全队列 ${esc((workbench.actions?.autopilot_sequence || []).length)} 个，锁定高风险动作 ${esc(actions.filter(a => a.tier === 'locked').length)} 个。`;
-    document.getElementById('flowArtifacts').textContent = `${presentArtifacts} 个本地产物可用于评审或交付检查。`;
+    document.getElementById('flowArtifacts').textContent = `${artifactCount} 个本地产物可用于评审或交付检查。`;
 
     document.getElementById('outputMatrix').innerHTML = outputRows.map(row => `
       <div class="matrixRow">
@@ -1309,7 +1313,7 @@ def render_product_workbench_html(payload: dict) -> str:
       ? data.asset_previews.map(item => `<div class="previewTile"><img src="${esc(item.url)}" alt=""><small>${esc(item.name)}</small></div>`).join('')
       : '<div class="hint">暂无本地预览图。</div>';
     document.getElementById('artifactsGrid').innerHTML = artifactEntries.map(([key, value]) => `
-      <div class="artifactLine ${value ? '' : 'missing'}"><b>${esc(key)}</b><small>${esc(value || '缺失')}</small></div>
+      <div class="artifactLine"><b>${esc(key)}</b><small>${esc(value)}</small></div>
     `).join('') || '<div class="hint">暂无本地产物。</div>';
   </script>
 </body>

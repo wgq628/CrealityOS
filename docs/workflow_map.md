@@ -2,6 +2,8 @@
 
 This document maps the current design-copilot workflow into capability phases. It is a blueprint view of existing behavior, not a code change plan.
 
+The active workflow is lean by default. `run-feishu-design-cycle` and `run-local-design-cycle` prepare the current design context and stop before downstream governance artifacts. Add `--full` only when the user explicitly wants the complete audit, learning, readiness, workflow, and review loop.
+
 ## End-To-End Flow
 
 ```mermaid
@@ -16,22 +18,52 @@ flowchart TD
   G --> H
   H --> I["Design decision record"]
   H --> J["Image production batch"]
-  J --> K["Generation jobs"]
-  K --> L["Execution package"]
-  L --> M["Generation results"]
-  M --> N["Candidate drift report"]
-  M --> O["Candidate comparison matrix"]
-  N --> P["Candidate review"]
-  O --> P
-  P --> Q["PSD handoff plan"]
-  Q --> R["PSD handoff package"]
-  R --> S["PSD slice spec"]
-  S --> T["Delivery readiness"]
-  T --> U["Designer review packet"]
-  U --> V["Cockpit and dashboard"]
-  V --> W["Meegle writeback draft"]
-  W --> X["Publish or transition gate"]
+  I --> K["Lean cycle report"]
+  J --> K
+  K --> L{"Next requested stage"}
+  L -->|Generate candidates| M["Generation jobs"]
+  M --> N["Execution package"]
+  N --> O["Generation results"]
+  O --> P["Candidate drift report"]
+  O --> Q["Candidate comparison matrix"]
+  P --> R["Candidate review"]
+  Q --> R
+  R --> S["PSD handoff plan"]
+  S --> T["PSD handoff package"]
+  T --> U["PSD slice spec"]
+  U --> V["Delivery readiness"]
+  V --> W["Designer review packet"]
+  W --> X["Cockpit and dashboard"]
+  X --> Y["Meegle writeback draft"]
+  Y --> Z["Publish or transition gate"]
+  L -->|Full cycle| AA["Metacognition, transition, learning"]
+  AA --> V
 ```
+
+## Default Cycle Commands
+
+The cycle commands are the daily copilot entrypoints:
+
+- `python -m agent.cli run-feishu-design-cycle --project-key <space> --work-item-id <id>`
+- `python -m agent.cli run-local-design-cycle --project-key <key> --work-item-id <id> --title <title> --requirement-file <path>`
+
+Default cycle output is intentionally small:
+
+- requirement and clarification reports
+- style card, style transfer, and style alignment reports
+- creative pack and design decision record
+- delivery manifest and image generation batch
+- designer workpack artifacts such as the task sheet and prompt file
+- cycle report with skipped-step notes and the next smallest safe actions
+
+Default cycle output does not include:
+
+- `latest_learning_digest.json`
+- `delivery_readiness_report.json`
+- `design_workflow_plan.json`
+- `designer_review_packet.json`
+
+Use the corresponding `--full` flag when those artifacts are truly needed. When a default cycle reuses an output directory that contains historical full-cycle directories, it removes `delivery_readiness`, `workflow`, and `review_packet` from that run directory so the folder reflects the current mode.
 
 ## Phase 1: Requirement Intake
 
@@ -111,8 +143,9 @@ Typical outputs:
 - `creative_pack.md`
 - `design_decision_record.json`
 - `design_decision_record.md`
-- `design_workflow_plan.json`
 - `design_cycle_report.json`
+
+Mode note: `design_workflow_plan.json` is a full-cycle or explicit planning artifact. It is not produced by the default cycle commands.
 
 ## Phase 4: Image Production
 
@@ -204,6 +237,8 @@ Typical outputs:
 - `dashboard.html`
 - `dashboard_data.json`
 
+Mode note: delivery readiness and designer review packets are full-cycle or explicit stage artifacts. They are skipped by default cycle commands and should not appear as missing future-stage requirements in artifact indexes.
+
 ## Phase 8: Collaboration Writeback
 
 Purpose: prepare reviewed Meegle comments and workflow transitions behind explicit gates.
@@ -245,3 +280,15 @@ Typical outputs:
 - `latest_learning_digest.json`
 - `doctor_report.json`
 
+Mode note: transition summaries and learning digests are part of the full-cycle governance path. They should not be created just because a designer needs the next lean production step.
+
+## Artifact Index Rules
+
+Workflow and review surfaces are stage-aware:
+
+- List existing artifacts only.
+- Use `暂无已生成产物。` when no relevant artifact exists.
+- Do not list future-stage assets as `缺失`.
+- Warn about missing artifacts only when they block the current stage.
+
+This keeps cycle, workflow, and review outputs useful as operator surfaces instead of turning them into inventories of work the user did not ask to run.

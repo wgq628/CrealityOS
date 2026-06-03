@@ -27,7 +27,7 @@ class CliEntrypointTests(unittest.TestCase):
         self.assertTrue(Path(result["doctor_report"]).exists())
         self.assertTrue(Path(result["doctor_report_md"]).exists())
         self.assertNotEqual(result["status"], "blocked")
-        report = json.loads(Path(result["doctor_report"]).read_text(encoding="utf-8"))
+        report = json.loads(self._read_text_with_retry(Path(result["doctor_report"])))
         check_ids = {item["check_id"] for item in report["checks"]}
         self.assertIn("PYTHON", check_ids)
         self.assertIn("MEEGLE", check_ids)
@@ -35,6 +35,27 @@ class CliEntrypointTests(unittest.TestCase):
         content = Path(result["doctor_report_md"]).read_text(encoding="utf-8")
         self.assertIn("本地环境诊断", content)
         self.assertIn("python -m unittest discover -s tests -v", content)
+
+    def test_doctor_treats_workflow_plan_as_optional_in_lean_cycle(self) -> None:
+        requirement_file = self.root / "lean.md"
+        requirement_file.write_text("Need 9:16 gameplay demo image output as PNG.", encoding="utf-8")
+        self.app.run_local_design_cycle(
+            project_key="LEAN",
+            work_item_id="9102",
+            title="Lean Demo",
+            requirement_file=str(requirement_file),
+            same_category="general-game-design",
+            full=False,
+        )
+
+        result = self.app.doctor(project_key="LEAN")
+        report = json.loads(self._read_text_with_retry(Path(result["doctor_report"])))
+        workflow_checks = [item for item in report["checks"] if item["check_id"] == "WORKFLOW"]
+
+        self.assertTrue(workflow_checks)
+        self.assertEqual(workflow_checks[0]["status"], "pass")
+        self.assertIn("可选项", workflow_checks[0]["detail"])
+        self.assertFalse(any(item["check_id"] == "WORKFLOW" and item["status"] == "warning" for item in report["checks"]))
 
     def test_cockpit_without_session_creates_draft_entrypoint(self) -> None:
         result = self.app.cockpit(project_key="EMPTY")
@@ -130,10 +151,12 @@ class CliEntrypointTests(unittest.TestCase):
         self.assertEqual(payload["console"]["project_key"], "CONSOLE")
         self.assertEqual(payload["console"]["work_item_id"], "8101")
         self.assertTrue(payload["artifact_index"]["creative_pack"])
+        self.assertTrue(all(payload["artifact_index"].values()))
         self.assertIn("CrealityOS Workbench", html)
         self.assertIn("console-data", html)
         self.assertIn("/api/state", html)
         self.assertIn("/api/action/run", html)
+        self.assertNotIn("value || '缺失'", html)
         self.assertIn("output_matrix", payload["workbench"])
         self.assertTrue(payload["workbench"]["actions"]["autopilot_sequence"])
 

@@ -9,15 +9,24 @@ from agent.models import DesignerReviewPacket, SessionSnapshot
 
 class DesignerReviewPacketBuilder:
     IMPORTANT_FILES = (
+        "design_brief.json",
         "design_brief.md",
+        "requirement_clarification_report.json",
         "requirement_clarification_report.md",
         "requirement_clarification_comment.md",
+        "requirement_change_report.json",
         "requirement_change_report.md",
+        "creative_pack.json",
         "creative_pack.md",
+        "style_transfer_report.json",
         "style_transfer_report.md",
+        "style_alignment_report.json",
         "style_alignment_report.md",
+        "design_decision_record.json",
         "design_decision_record.md",
+        "style_card.json",
         "style_card.md",
+        "image_generation_batch.json",
         "image_generation_batch.md",
         "candidate_evaluation.md",
         "image_execution_package.md",
@@ -79,8 +88,11 @@ class DesignerReviewPacketBuilder:
             "",
             "## 产物索引",
         ]
-        for key, value in packet.artifact_index.items():
-            lines.append(f"- {key}: `{value or '缺失'}`")
+        if packet.artifact_index:
+            for key, value in packet.artifact_index.items():
+                lines.append(f"- {key}: `{value}`")
+        else:
+            lines.append("- 暂无已生成产物。")
         lines.extend(["", "## 推荐评审顺序", *(f"- [ ] {item}" for item in packet.review_steps)])
         lines.extend(["", "## 风险提醒", *(f"- {item}" for item in packet.warnings or ["无"])])
         lines.extend(["", "## 下一步", *(f"- {item}" for item in packet.next_actions)])
@@ -88,14 +100,14 @@ class DesignerReviewPacketBuilder:
         return "\n".join(lines)
 
     def _collect_artifacts(self, snapshot: SessionSnapshot | None, output_dir: Path | None) -> dict[str, str | None]:
-        artifacts: dict[str, str | None] = {Path(name).stem: None for name in self.IMPORTANT_FILES}
+        artifacts: dict[str, str | None] = {}
         candidates: list[Path] = []
         if output_dir and output_dir.exists():
-            candidates.extend(path for path in output_dir.rglob("*.md") if path.name in self.IMPORTANT_FILES)
+            candidates.extend(path for path in output_dir.rglob("*") if path.name in self.IMPORTANT_FILES)
         if snapshot:
             for raw in snapshot.last_artifacts:
                 path = Path(raw)
-                if path.suffix.lower() == ".md" and path.exists():
+                if path.suffix.lower() in {".json", ".md"} and path.exists():
                     candidates.append(path)
             # Learning/audit reports live in memory, so snapshot paths are the most reliable source.
         for path in candidates:
@@ -153,9 +165,9 @@ class DesignerReviewPacketBuilder:
             "最后看 delivery_readiness_report，确认是否能进入交付或 Meegle 回写。",
             "如已有 design_workflow_plan，按步骤看板推进下一条最小安全动作。",
         ]
-        if not artifact_index.get("generated_gallery"):
+        if artifact_index.get("image_generation_batch") and not artifact_index.get("generated_gallery"):
             steps.append("当前未登记生成图，可先评审 image_generation_batch 并决定是否执行出图。")
-        if not artifact_index.get("candidate_review"):
+        if artifact_index.get("generated_gallery") and not artifact_index.get("candidate_review"):
             steps.append("当前未发现候选图评审回写，若已有候选图请先沉淀采纳/驳回原因。")
         return steps
 
@@ -184,10 +196,6 @@ class DesignerReviewPacketBuilder:
             warnings.append("已有生成图索引但缺少候选方案对比矩阵，进入 PSD 前建议先明确采纳/修正/驳回方向。")
         if artifact_index.get("psd_handoff_plan") and not artifact_index.get("psd_slice_spec_report"):
             warnings.append("已有 PSD 交接计划但缺少 PSD/切图规格核对报告，进入 Photoshop 前建议补齐。")
-        if not artifact_index.get("delivery_readiness_report"):
-            warnings.append("缺少交付质量门报告，正式交付前建议先生成。")
-        if not artifact_index.get("design_workflow_plan"):
-            warnings.append("缺少设计工作流计划，继续推进前建议生成步骤看板。")
         return warnings
 
     @staticmethod
@@ -215,8 +223,6 @@ class DesignerReviewPacketBuilder:
             actions.append("进入 Photoshop 前运行 create-psd-slice-spec-report，核对图层、切图任务和命名样例。")
         if readiness_payload and readiness_payload.get("status") == "ready_for_designer_confirmation":
             actions.append("设计师确认后，可创建 Meegle 回写草稿或进入正式交付 staging。")
-        if not artifact_index.get("design_workflow_plan"):
-            actions.append("运行 create-design-workflow-plan，生成当前需求的步骤看板和下一步命令。")
         actions.append("所有对外发送、Meegle 发布、工作流流转和文件覆盖仍需显式确认。")
         return list(dict.fromkeys(actions))
 

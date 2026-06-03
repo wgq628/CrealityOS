@@ -331,6 +331,7 @@ def build_parser() -> argparse.ArgumentParser:
     feishu_cycle.add_argument("--project-key", required=True)
     feishu_cycle.add_argument("--work-item-id", required=True)
     feishu_cycle.add_argument("--asset-root")
+    feishu_cycle.add_argument("--full", action="store_true", help="Run the full audit/learning/readiness/review loop.")
 
     build_local_pack = subparsers.add_parser(
         "build-local-creative-pack",
@@ -397,6 +398,7 @@ def build_parser() -> argparse.ArgumentParser:
     local_cycle.add_argument("--category")
     local_cycle.add_argument("--doc-file", action="append", dest="doc_files")
     local_cycle.add_argument("--asset-root")
+    local_cycle.add_argument("--full", action="store_true", help="Run the full audit/learning/readiness/review loop.")
 
     ingest = subparsers.add_parser("ingest-feedback", help="Write designer feedback back into style memory.")
     ingest.add_argument("--project-key", required=True)
@@ -651,6 +653,7 @@ def main() -> None:
             project_key=args.project_key,
             work_item_id=args.work_item_id,
             asset_root=args.asset_root,
+            full=args.full,
         )
     elif args.command == "build-local-creative-pack":
         output = app.build_local_creative_pack(
@@ -692,6 +695,7 @@ def main() -> None:
             same_category=args.category,
             doc_files=args.doc_files,
             asset_root=args.asset_root,
+            full=args.full,
         )
     elif args.command == "ingest-feedback":
         feedback = _load_feedback(args.feedback, args.feedback_file)

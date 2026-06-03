@@ -45,12 +45,23 @@ def load_json(path: Path, default: Any) -> Any:
         return default
     for attempt in range(8):
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            return json.loads(read_text(path))
         except (PermissionError, json.JSONDecodeError):
             if attempt == 7:
                 raise
             time.sleep(0.05)
     return default
+
+
+def read_text(path: Path, encoding: str = "utf-8") -> str:
+    for attempt in range(8):
+        try:
+            return path.read_text(encoding=encoding)
+        except PermissionError:
+            if attempt == 7:
+                raise
+            time.sleep(0.05)
+    return ""
 
 
 def find_doc_links(value: Any) -> list[str]:
